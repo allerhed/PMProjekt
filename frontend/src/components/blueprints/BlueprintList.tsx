@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { uploadApi } from '../../services/upload.api';
+import { useTasksByBlueprint } from '../../hooks/useTasks';
 import BlueprintUploader from '../uploads/BlueprintUploader';
 import BlueprintViewer from './BlueprintViewer';
+import type { Annotation } from './PdfAnnotationViewer';
 import Spinner from '../ui/Spinner';
 import EmptyState from '../ui/EmptyState';
 import Button from '../ui/Button';
@@ -14,11 +17,33 @@ interface BlueprintListProps {
 
 export default function BlueprintList({ projectId, onSelect }: BlueprintListProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: blueprints = [], isLoading } = useQuery({
     queryKey: ['blueprints', projectId],
     queryFn: () => uploadApi.listBlueprints(projectId),
   });
   const [viewingBlueprint, setViewingBlueprint] = useState<any>(null);
+
+  // Fetch tasks linked to the viewed blueprint
+  const { data: blueprintTasks = [] } = useTasksByBlueprint(projectId, viewingBlueprint?.id);
+
+  // Convert tasks to annotations
+  const annotations: Annotation[] = blueprintTasks
+    .filter((t: any) =>
+      t.annotation_x != null && t.annotation_y != null &&
+      t.annotation_width != null && t.annotation_height != null &&
+      t.annotation_page != null
+    )
+    .map((t: any) => ({
+      taskId: t.id,
+      taskNumber: t.task_number,
+      status: t.status,
+      x: t.annotation_x,
+      y: t.annotation_y,
+      width: t.annotation_width,
+      height: t.annotation_height,
+      page: t.annotation_page,
+    }));
 
   async function handleDelete(e: React.MouseEvent, blueprintId: string) {
     e.stopPropagation();
@@ -37,6 +62,10 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
     }
   }
 
+  function handleAnnotationClick(taskId: string) {
+    navigate(`/projects/${projectId}/tasks/${taskId}`);
+  }
+
   if (isLoading) {
     return <div className="flex justify-center py-4"><Spinner size="sm" /></div>;
   }
@@ -48,7 +77,7 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
       {blueprints.length === 0 ? (
         <EmptyState
           title="No blueprints"
-          description="Upload a blueprint to get started."
+          description="Upload a PDF blueprint to get started."
         />
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -95,22 +124,31 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
         </div>
       )}
 
-      {/* Inline viewer */}
+      {/* Inline viewer with annotations */}
       {viewingBlueprint && (
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-medium text-gray-900">{viewingBlueprint.name}</h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setViewingBlueprint(null)}
-            >
-              Close
-            </Button>
+            <div className="flex items-center gap-3">
+              {annotations.length > 0 && (
+                <span className="text-sm text-gray-500">
+                  {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setViewingBlueprint(null)}
+              >
+                Close
+              </Button>
+            </div>
           </div>
           <BlueprintViewer
             imageUrl={viewingBlueprint.download_url}
             mimeType={viewingBlueprint.mime_type}
+            annotations={annotations}
+            onAnnotationClick={handleAnnotationClick}
           />
         </div>
       )}

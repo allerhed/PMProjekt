@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useTask, useUpdateTask } from '../../hooks/useTasks';
 import { useComments, useCreateComment } from '../../hooks/useComments';
+import { uploadApi } from '../../services/upload.api';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Spinner from '../../components/ui/Spinner';
+import Select from '../../components/ui/Select';
 import PhotoUploader from '../../components/uploads/PhotoUploader';
 import PhotoGallery from '../../components/photos/PhotoGallery';
+import PdfAnnotationViewer from '../../components/blueprints/PdfAnnotationViewer';
+import type { Annotation } from '../../components/blueprints/PdfAnnotationViewer';
 import { format } from 'date-fns';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -32,6 +37,15 @@ export default function TaskDetailPage() {
   const { data: comments = [], isLoading: commentsLoading } = useComments(projectId!, taskId!);
   const createComment = useCreateComment(projectId!, taskId!);
   const [commentText, setCommentText] = useState('');
+  const [drawMode, setDrawMode] = useState(false);
+  const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>('');
+
+  // Fetch blueprints for the project
+  const { data: blueprints = [] } = useQuery({
+    queryKey: ['blueprints', projectId],
+    queryFn: () => uploadApi.listBlueprints(projectId!),
+    enabled: !!projectId,
+  });
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Spinner /></div>;
@@ -43,6 +57,25 @@ export default function TaskDetailPage() {
 
   const validTransitions = VALID_TRANSITIONS[task.status] || [];
 
+  // Determine which blueprint to show
+  const activeBlueprintId = task.blueprint_id || selectedBlueprintId;
+  const activeBlueprint = blueprints.find((bp: any) => bp.id === activeBlueprintId);
+
+  // Build annotation for this task if it has one
+  const taskAnnotation: Annotation | null = (task.annotation_x != null && task.annotation_y != null &&
+    task.annotation_width != null && task.annotation_height != null && task.annotation_page != null)
+    ? {
+        taskId: task.id,
+        taskNumber: task.task_number,
+        status: task.status,
+        x: task.annotation_x,
+        y: task.annotation_y,
+        width: task.annotation_width,
+        height: task.annotation_height,
+        page: task.annotation_page,
+      }
+    : null;
+
   async function handleStatusChange(newStatus: string) {
     await updateTask.mutateAsync({ taskId: taskId!, data: { status: newStatus } });
   }
@@ -52,6 +85,41 @@ export default function TaskDetailPage() {
     if (!commentText.trim()) return;
     await createComment.mutateAsync(commentText);
     setCommentText('');
+  }
+
+  async function handleBlueprintSelect(blueprintId: string) {
+    setSelectedBlueprintId(blueprintId);
+    if (blueprintId && !task.blueprint_id) {
+      await updateTask.mutateAsync({ taskId: taskId!, data: { blueprintId } });
+    }
+  }
+
+  async function handleAnnotationDraw(rect: { x: number; y: number; width: number; height: number; page: number }) {
+    setDrawMode(false);
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: {
+        blueprintId: activeBlueprintId,
+        annotationX: rect.x,
+        annotationY: rect.y,
+        annotationWidth: rect.width,
+        annotationHeight: rect.height,
+        annotationPage: rect.page,
+      },
+    });
+  }
+
+  async function handleClearAnnotation() {
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: {
+        annotationX: null,
+        annotationY: null,
+        annotationWidth: null,
+        annotationHeight: null,
+        annotationPage: null,
+      },
+    });
   }
 
   return (
@@ -68,7 +136,14 @@ export default function TaskDetailPage() {
       <Card className="mb-6">
         <CardHeader>
           <div className="flex items-start justify-between">
-            <h1 className="text-xl font-bold text-gray-900">{task.title}</h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                <span className="text-gray-400 font-mono">#{task.task_number}</span> {task.title}
+              </h1>
+              {task.project_name && (
+                <p className="text-sm text-gray-500 mt-1">Project: {task.project_name}</p>
+              )}
+            </div>
             <Badge variant={statusBadge[task.status]} size="md">
               {task.status.replace('_', ' ')}
             </Badge>
@@ -138,6 +213,98 @@ export default function TaskDetailPage() {
               </div>
             )}
           </div>
+        </CardBody>
+      </Card>
+
+      {/* Blueprint Annotation */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Blueprint Annotation</h2>
+            <div className="flex gap-2">
+              {activeBlueprint && !drawMode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setDrawMode(true)}
+                >
+                  {taskAnnotation ? 'Redraw' : 'Draw Annotation'}
+                </Button>
+              )}
+              {activeBlueprint && drawMode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setDrawMode(false)}
+                >
+                  Cancel
+                </Button>
+              )}
+              {taskAnnotation && !drawMode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleClearAnnotation}
+                  loading={updateTask.isPending}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardBody>
+          {blueprints.length === 0 ? (
+            <p className="text-sm text-gray-500">No blueprints uploaded for this project. Upload a blueprint in the Blueprints tab.</p>
+          ) : !activeBlueprintId ? (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Select a blueprint to annotate:</p>
+              <Select
+                options={blueprints.map((bp: any) => ({ value: bp.id, label: bp.name }))}
+                value=""
+                onChange={(e) => handleBlueprintSelect(e.target.value)}
+                placeholder="Choose blueprint..."
+              />
+            </div>
+          ) : activeBlueprint ? (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm text-gray-500">Blueprint:</span>
+                <span className="text-sm font-medium text-gray-900">{activeBlueprint.name}</span>
+                {task.blueprint_id && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      await updateTask.mutateAsync({
+                        taskId: taskId!,
+                        data: {
+                          blueprintId: null,
+                          annotationX: null,
+                          annotationY: null,
+                          annotationWidth: null,
+                          annotationHeight: null,
+                          annotationPage: null,
+                        },
+                      });
+                      setSelectedBlueprintId('');
+                    }}
+                  >
+                    Change
+                  </Button>
+                )}
+              </div>
+              <PdfAnnotationViewer
+                pdfUrl={activeBlueprint.download_url}
+                annotations={taskAnnotation ? [taskAnnotation] : []}
+                drawMode={drawMode}
+                onAnnotationDraw={handleAnnotationDraw}
+                initialPage={taskAnnotation?.page || 1}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Blueprint not found.</p>
+          )}
         </CardBody>
       </Card>
 

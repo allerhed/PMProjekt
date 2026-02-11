@@ -84,6 +84,8 @@ export interface ProjectStats {
 export interface Task {
   id: string;
   projectId: string;
+  taskNumber: number;
+  projectName?: string;
   blueprintId: string | null;
   title: string;
   description: string | null;
@@ -101,6 +103,11 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   verifiedAt: string | null;
+  annotationX: number | null;
+  annotationY: number | null;
+  annotationWidth: number | null;
+  annotationHeight: number | null;
+  annotationPage: number | null;
 }
 
 export interface Blueprint {

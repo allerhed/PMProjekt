@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png'] as const;
-const ALLOWED_BLUEPRINT_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const;
+const ALLOWED_BLUEPRINT_TYPES = ['application/pdf'] as const;
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_BLUEPRINT_SIZE = 50 * 1024 * 1024; // 50 MB
 

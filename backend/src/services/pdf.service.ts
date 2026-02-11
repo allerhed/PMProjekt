@@ -84,7 +84,7 @@ export async function generateProtocolPdf(data: PdfGenerationData): Promise<Buff
 
         // Table rows
         doc.font('Helvetica').fontSize(8).fillColor('#333');
-        tradeTasks.forEach((task, index) => {
+        tradeTasks.forEach((task) => {
           if (y > 750) {
             doc.addPage();
             y = 50;
@@ -95,7 +95,7 @@ export async function generateProtocolPdf(data: PdfGenerationData): Promise<Buff
             : task.assigned_to_contractor_email || '—';
 
           const row = [
-            String(index + 1),
+            String(task.task_number),
             task.title.length > 35 ? task.title.substring(0, 35) + '...' : task.title,
             task.status,
             task.priority,

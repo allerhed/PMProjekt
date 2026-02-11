@@ -190,7 +190,10 @@ function TaskRow({ task, onClick }: { task: any; onClick: () => void }) {
       <div className="flex items-center gap-3 min-w-0">
         <Badge variant={statusBadge[task.status] || 'gray'}>{task.status.replace('_', ' ')}</Badge>
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 truncate">{task.title}</p>
+          <p className="font-medium text-gray-900 truncate">
+            <span className="text-gray-400 font-mono text-sm mr-1">#{task.task_number}</span>
+            {task.title}
+          </p>
           {task.trade && <p className="text-xs text-gray-500">{task.trade}</p>}
         </div>
       </div>

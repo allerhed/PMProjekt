@@ -53,3 +53,11 @@ export function useDeleteTask(projectId: string) {
     },
   });
 }
+
+export function useTasksByBlueprint(projectId: string, blueprintId: string | undefined) {
+  return useQuery({
+    queryKey: ['tasks-by-blueprint', projectId, blueprintId],
+    queryFn: () => taskApi.listByBlueprint(projectId, blueprintId!),
+    enabled: !!projectId && !!blueprintId,
+  });
+}

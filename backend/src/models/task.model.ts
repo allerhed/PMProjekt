@@ -3,6 +3,7 @@ import pool from '../config/database';
 export interface TaskRow {
   id: string;
   project_id: string;
+  task_number: number;
   blueprint_id: string | null;
   title: string;
   description: string | null;
@@ -18,11 +19,17 @@ export interface TaskRow {
   updated_at: Date;
   completed_at: Date | null;
   verified_at: Date | null;
+  annotation_x: number | null;
+  annotation_y: number | null;
+  annotation_width: number | null;
+  annotation_height: number | null;
+  annotation_page: number | null;
 }
 
 export interface TaskWithCounts extends TaskRow {
   photo_count: number;
   comment_count: number;
+  project_name?: string;
   creator_first_name?: string;
   creator_last_name?: string;
   assignee_first_name?: string;
@@ -101,6 +108,7 @@ export async function findTasksByProject(
   values.push(pagination.limit, pagination.offset);
   const result = await pool.query(
     `SELECT t.*,
+       p.name as project_name,
        COALESCE(ph.cnt, 0)::int as photo_count,
        COALESCE(cm.cnt, 0)::int as comment_count,
        cu.first_name as creator_first_name,
@@ -138,6 +146,7 @@ export async function findTaskById(
 
   const result = await pool.query(
     `SELECT t.*,
+       p.name as project_name,
        COALESCE(ph.cnt, 0)::int as photo_count,
        COALESCE(cm.cnt, 0)::int as comment_count,
        cu.first_name as creator_first_name,
@@ -169,17 +178,26 @@ export async function createTask(data: {
   assignedToUser?: string;
   assignedToContractorEmail?: string;
   createdBy: string;
+  annotationX?: number;
+  annotationY?: number;
+  annotationWidth?: number;
+  annotationHeight?: number;
+  annotationPage?: number;
 }): Promise<TaskRow> {
   const result = await pool.query(
-    `INSERT INTO tasks (project_id, blueprint_id, title, description, status, priority, trade,
-       location_x, location_y, assigned_to_user, assigned_to_contractor_email, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+    `INSERT INTO tasks (project_id, task_number, blueprint_id, title, description, status, priority, trade,
+       location_x, location_y, assigned_to_user, assigned_to_contractor_email, created_by,
+       annotation_x, annotation_y, annotation_width, annotation_height, annotation_page)
+     VALUES ($1, (SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE project_id = $1), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
     [
       data.projectId, data.blueprintId || null, data.title, data.description || null,
       data.status || 'open', data.priority || 'normal', data.trade || null,
       data.locationX ?? null, data.locationY ?? null,
       data.assignedToUser || null, data.assignedToContractorEmail || null,
       data.createdBy,
+      data.annotationX ?? null, data.annotationY ?? null,
+      data.annotationWidth ?? null, data.annotationHeight ?? null,
+      data.annotationPage ?? null,
     ],
   );
   return result.rows[0];
@@ -207,6 +225,11 @@ export async function updateTask(
     assignedToContractorEmail: 'assigned_to_contractor_email',
     completedAt: 'completed_at',
     verifiedAt: 'verified_at',
+    annotationX: 'annotation_x',
+    annotationY: 'annotation_y',
+    annotationWidth: 'annotation_width',
+    annotationHeight: 'annotation_height',
+    annotationPage: 'annotation_page',
   };
 
   for (const [key, value] of Object.entries(updates)) {
@@ -231,4 +254,30 @@ export async function updateTask(
 export async function deleteTask(id: string): Promise<boolean> {
   const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING id', [id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+export async function findTasksByBlueprint(
+  blueprintId: string,
+  organizationId: string,
+): Promise<TaskWithCounts[]> {
+  const result = await pool.query(
+    `SELECT t.*,
+       p.name as project_name,
+       COALESCE(ph.cnt, 0)::int as photo_count,
+       COALESCE(cm.cnt, 0)::int as comment_count,
+       cu.first_name as creator_first_name,
+       cu.last_name as creator_last_name,
+       au.first_name as assignee_first_name,
+       au.last_name as assignee_last_name
+     FROM tasks t
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_photos WHERE task_id = t.id) ph ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_comments WHERE task_id = t.id) cm ON true
+     LEFT JOIN users cu ON cu.id = t.created_by
+     LEFT JOIN users au ON au.id = t.assigned_to_user
+     WHERE t.blueprint_id = $1 AND p.organization_id = $2
+     ORDER BY t.task_number`,
+    [blueprintId, organizationId],
+  );
+  return result.rows;
 }

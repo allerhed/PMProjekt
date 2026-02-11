@@ -96,6 +96,7 @@ CREATE INDEX idx_blueprints_project ON blueprints(project_id);
 CREATE TABLE tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_number INTEGER NOT NULL,
   blueprint_id UUID REFERENCES blueprints(id) ON DELETE SET NULL,
   title VARCHAR(255) NOT NULL,
   description TEXT,
@@ -110,7 +111,13 @@ CREATE TABLE tasks (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE,
-  verified_at TIMESTAMP WITH TIME ZONE
+  verified_at TIMESTAMP WITH TIME ZONE,
+  annotation_x FLOAT,
+  annotation_y FLOAT,
+  annotation_width FLOAT,
+  annotation_height FLOAT,
+  annotation_page INTEGER,
+  UNIQUE(project_id, task_number)
 );
 
 CREATE INDEX idx_tasks_project_status ON tasks(project_id, status);

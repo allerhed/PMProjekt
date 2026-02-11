@@ -10,6 +10,11 @@ export const createTaskSchema = z.object({
   locationY: z.number().min(0).max(1).optional(),
   assignedToUser: z.string().uuid().optional(),
   assignedToContractorEmail: z.string().email().optional(),
+  annotationX: z.number().min(0).max(1).nullable().optional(),
+  annotationY: z.number().min(0).max(1).nullable().optional(),
+  annotationWidth: z.number().min(0).max(1).nullable().optional(),
+  annotationHeight: z.number().min(0).max(1).nullable().optional(),
+  annotationPage: z.number().int().min(1).nullable().optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -23,6 +28,11 @@ export const updateTaskSchema = z.object({
   locationY: z.number().min(0).max(1).nullable().optional(),
   assignedToUser: z.string().uuid().nullable().optional(),
   assignedToContractorEmail: z.string().email().nullable().optional(),
+  annotationX: z.number().min(0).max(1).nullable().optional(),
+  annotationY: z.number().min(0).max(1).nullable().optional(),
+  annotationWidth: z.number().min(0).max(1).nullable().optional(),
+  annotationHeight: z.number().min(0).max(1).nullable().optional(),
+  annotationPage: z.number().int().min(1).nullable().optional(),
 });
 
 export const taskFiltersSchema = z.object({

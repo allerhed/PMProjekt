@@ -70,8 +70,8 @@ async function seed() {
     const taskIds: string[] = [];
     for (const t of tasks) {
       const result = await pool.query(
-        `INSERT INTO tasks (project_id, title, trade, priority, status, created_by, assigned_to_user, completed_at, verified_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+        `INSERT INTO tasks (project_id, task_number, title, trade, priority, status, created_by, assigned_to_user, completed_at, verified_at)
+         VALUES ($1, (SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE project_id = $1), $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
         [t.project, t.title, t.trade, t.priority, t.status, userIds.project_manager, userIds.field_user,
          t.status === 'completed' || t.status === 'verified' ? new Date() : null,
          t.status === 'verified' ? new Date() : null],

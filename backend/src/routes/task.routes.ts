@@ -29,6 +29,22 @@ async function verifyProjectAccess(req: Request, res: Response): Promise<boolean
   return true;
 }
 
+// GET /api/v1/projects/:projectId/tasks/by-blueprint/:blueprintId — tasks linked to a blueprint
+router.get('/by-blueprint/:blueprintId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!(await verifyProjectAccess(req, res))) return;
+
+    const tasks = await taskModel.findTasksByBlueprint(
+      param(req.params.blueprintId),
+      req.user!.organizationId,
+    );
+
+    sendSuccess(res, { tasks });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/v1/projects/:projectId/tasks — list tasks with filtering
 router.get('/', parsePagination, async (req: Request, res: Response, next: NextFunction) => {
   try {

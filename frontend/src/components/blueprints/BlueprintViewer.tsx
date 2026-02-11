@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Button from '../ui/Button';
+import PdfAnnotationViewer from './PdfAnnotationViewer';
+import type { Annotation } from './PdfAnnotationViewer';
 
 interface BlueprintViewerProps {
   imageUrl: string;
@@ -12,9 +14,13 @@ interface BlueprintViewerProps {
     priority: string;
     title: string;
   }>;
+  annotations?: Annotation[];
   onMarkerClick?: (markerId: string) => void;
+  onAnnotationClick?: (taskId: string) => void;
+  onAnnotationDraw?: (rect: { x: number; y: number; width: number; height: number; page: number }) => void;
   onLocationSelect?: (x: number, y: number) => void;
   createMode?: boolean;
+  drawMode?: boolean;
 }
 
 const MIN_ZOOM = 0.5;
@@ -32,9 +38,13 @@ export default function BlueprintViewer({
   imageUrl,
   mimeType,
   markers = [],
+  annotations = [],
   onMarkerClick,
+  onAnnotationClick,
+  onAnnotationDraw,
   onLocationSelect,
   createMode = false,
+  drawMode = false,
 }: BlueprintViewerProps) {
   const isPdf = mimeType === 'application/pdf' || imageUrl.toLowerCase().endsWith('.pdf');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,21 +101,20 @@ export default function BlueprintViewer({
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
   }, []);
 
-  // PDF viewer — use browser's built-in PDF renderer
+  // PDF viewer — delegate to PdfAnnotationViewer
   if (isPdf) {
     return (
-      <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-100">
-        <iframe
-          src={imageUrl}
-          title="Blueprint PDF"
-          className="w-full border-0"
-          style={{ height: '700px' }}
-        />
-      </div>
+      <PdfAnnotationViewer
+        pdfUrl={imageUrl}
+        annotations={annotations}
+        drawMode={drawMode}
+        onAnnotationDraw={onAnnotationDraw}
+        onAnnotationClick={onAnnotationClick}
+      />
     );
   }
 
-  // Image viewer with zoom/pan/markers
+  // Image viewer with zoom/pan/markers (legacy support for existing image blueprints)
   return (
     <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-gray-100">
       {/* Controls */}

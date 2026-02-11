@@ -47,4 +47,9 @@ export const taskApi = {
     const res = await api.delete(`/projects/${projectId}/tasks/${taskId}`);
     return res.data;
   },
+
+  async listByBlueprint(projectId: string, blueprintId: string) {
+    const res = await api.get(`/projects/${projectId}/tasks/by-blueprint/${blueprintId}`);
+    return res.data.data.tasks;
+  },
 };
