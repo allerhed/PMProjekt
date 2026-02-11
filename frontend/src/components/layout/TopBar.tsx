@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import Button from '../ui/Button';
 
@@ -24,15 +25,17 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
 
       {/* User menu */}
       <div className="flex items-center gap-4">
-        <div className="hidden sm:block text-right">
-          <p className="text-sm font-medium text-gray-900">
-            {user?.firstName} {user?.lastName}
-          </p>
-          <p className="text-xs text-gray-500">{user?.role?.replace('_', ' ')}</p>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-medium">
-          {user?.firstName?.[0]}{user?.lastName?.[0]}
-        </div>
+        <Link to="/profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+          <div className="hidden sm:block text-right">
+            <p className="text-sm font-medium text-gray-900">
+              {user?.firstName} {user?.lastName}
+            </p>
+            <p className="text-xs text-gray-500">{user?.role?.replace('_', ' ')}</p>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-medium">
+            {user?.firstName?.[0]}{user?.lastName?.[0]}
+          </div>
+        </Link>
         <Button variant="ghost" size="sm" onClick={logout}>
           Logout
         </Button>

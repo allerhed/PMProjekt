@@ -6,7 +6,7 @@ import { parsePagination } from '../middleware/pagination';
 import { sendSuccess, sendError } from '../utils/response';
 import { logAuditAction } from '../services/audit.service';
 import { UserRole } from '../types';
-import { hashPassword } from '../utils/password';
+import { hashPassword, comparePassword, validatePasswordPolicy } from '../utils/password';
 import * as userModel from '../models/user.model';
 import { z } from 'zod';
 import { param } from '../utils/params';
@@ -24,8 +24,11 @@ const createUserSchema = z.object({
 const updateUserSchema = z.object({
   firstName: z.string().min(1).max(100).optional(),
   lastName: z.string().min(1).max(100).optional(),
+  email: z.string().email().optional(),
   role: z.enum(['org_admin', 'project_manager', 'field_user']).optional(),
   isActive: z.boolean().optional(),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8).optional(),
 });
 
 // GET /api/v1/users — list users in org
@@ -154,6 +157,13 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
       delete req.body.isActive;
     }
 
+    // Only self can change email and password
+    if (!isSelf) {
+      delete req.body.email;
+      delete req.body.currentPassword;
+      delete req.body.newPassword;
+    }
+
     // Org scoping
     if (req.user!.role !== UserRole.SUPER_ADMIN && targetUser.organization_id !== req.user!.organizationId) {
       sendError(res, 404, 'NOT_FOUND', 'User not found');
@@ -165,6 +175,38 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
     if (req.body.lastName) updates.last_name = req.body.lastName;
     if (req.body.role) updates.role = req.body.role;
     if (req.body.isActive !== undefined) updates.is_active = req.body.isActive;
+
+    // Handle email change
+    if (req.body.email && req.body.email !== targetUser.email) {
+      const existing = await userModel.findUserByEmail(req.body.email);
+      if (existing) {
+        sendError(res, 409, 'CONFLICT', 'Email is already registered');
+        return;
+      }
+      updates.email = req.body.email;
+    }
+
+    // Handle password change
+    if (req.body.newPassword) {
+      if (!req.body.currentPassword) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Current password is required to change password');
+        return;
+      }
+
+      const isValid = await comparePassword(req.body.currentPassword, targetUser.password_hash);
+      if (!isValid) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Current password is incorrect');
+        return;
+      }
+
+      const policyError = validatePasswordPolicy(req.body.newPassword, targetUser.email);
+      if (policyError) {
+        sendError(res, 400, 'VALIDATION_ERROR', policyError);
+        return;
+      }
+
+      updates.password_hash = await hashPassword(req.body.newPassword);
+    }
 
     const updated = await userModel.updateUser(param(req.params.userId), updates);
 
