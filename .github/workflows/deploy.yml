@@ -1,0 +1,68 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only one deployment at a time
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # First run CI checks
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    # permissions for OIDC if using that for AWS auth
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Configure AWS credentials (placeholder)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # TODO: Set these in repository secrets
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-north-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # TODO: Create ECR repository and set name
+          ECR_REPOSITORY: construction-manager-backend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f backend/Dockerfile backend/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+
+      - name: Build and push frontend image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # TODO: Create ECR repository and set name
+          ECR_REPOSITORY: construction-manager-frontend
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f frontend/Dockerfile frontend/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+
+      - name: Deploy to ECS
+        # TODO: Configure ECS service and task definition
+        run: |
+          echo "TODO: Implement ECS deployment"
+          echo "Use aws ecs update-service or ecs-deploy action"
+          echo "Backend image: ${{ steps.login-ecr.outputs.registry }}/construction-manager-backend:${{ github.sha }}"
+          echo "Frontend image: ${{ steps.login-ecr.outputs.registry }}/construction-manager-frontend:${{ github.sha }}"

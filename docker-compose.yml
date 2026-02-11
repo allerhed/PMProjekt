@@ -1,0 +1,108 @@
+services:
+  database:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: construction_admin
+      POSTGRES_PASSWORD: devpass
+      POSTGRES_DB: construction_manager
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U construction_admin -d construction_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://construction_admin:devpass@database:5432/construction_manager
+      JWT_SECRET: dev-secret-key-change-in-production
+      JWT_EXPIRY: 7d
+      STORAGE_PROVIDER: local
+      STORAGE_PUBLIC_URL: http://localhost:3000
+      AWS_REGION: eu-north-1
+      AWS_S3_BUCKET: construction-manager-dev
+      AWS_S3_ENDPOINT: http://minio:9000
+      AWS_S3_PUBLIC_ENDPOINT: http://localhost:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/migrations:/app/migrations
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    profiles: [s3]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: [s3]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/construction-manager-dev;
+      mc anonymous set download local/construction-manager-dev;
+      mc admin config set local api cors_allow_origin='*' || true;
+      mc admin service restart local || true;
+      exit 0;
+      "
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
