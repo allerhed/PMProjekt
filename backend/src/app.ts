@@ -21,6 +21,7 @@ import organizationRoutes from './routes/organization.routes';
 import storageRoutes from './routes/storage.routes';
 import productRoutes from './routes/product.routes';
 import taskProductRoutes from './routes/taskProduct.routes';
+import { adminRouter as adminCustomFieldRoutes, publicRouter as publicCustomFieldRoutes } from './routes/customField.routes';
 import config from './config';
 
 const app = express();
@@ -69,6 +70,8 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/storage', storageRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/projects/:projectId/tasks/:taskId/products', taskProductRoutes);
+app.use('/api/v1/admin/custom-fields', adminCustomFieldRoutes);
+app.use('/api/v1/custom-fields', publicCustomFieldRoutes);
 
 // Error handling
 app.use(notFoundHandler);

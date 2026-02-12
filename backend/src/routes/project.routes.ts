@@ -14,6 +14,7 @@ import * as projectModel from '../models/project.model';
 import * as storageService from '../services/storage.service';
 import * as storageTracking from '../services/storageTracking.service';
 import * as thumbnailService from '../services/thumbnail.service';
+import { validateCustomFields } from '../services/customFieldValidation.service';
 import { param } from '../utils/params';
 
 const router = Router();
@@ -66,6 +67,17 @@ router.post(
   validate(createProjectSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Validate custom fields if provided
+      let sanitizedCustomFields: Record<string, unknown> | undefined;
+      if (req.body.customFields) {
+        const cfResult = await validateCustomFields(req.user!.organizationId, 'project', req.body.customFields);
+        if (!cfResult.valid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+          return;
+        }
+        sanitizedCustomFields = cfResult.sanitized;
+      }
+
       const project = await projectModel.createProject({
         organizationId: req.user!.organizationId,
         name: req.body.name,
@@ -74,6 +86,7 @@ router.post(
         startDate: req.body.startDate,
         targetCompletionDate: req.body.targetCompletionDate,
         responsibleUserId: req.body.responsibleUserId,
+        customFields: sanitizedCustomFields,
         createdBy: req.user!.userId,
       });
 
@@ -130,6 +143,16 @@ router.patch(
       if (req.body.startDate !== undefined) updates.start_date = req.body.startDate;
       if (req.body.targetCompletionDate !== undefined) updates.target_completion_date = req.body.targetCompletionDate;
       if (req.body.responsibleUserId !== undefined) updates.responsible_user_id = req.body.responsibleUserId;
+
+      // Validate custom fields if provided
+      if (req.body.customFields) {
+        const cfResult = await validateCustomFields(req.user!.organizationId, 'project', req.body.customFields);
+        if (!cfResult.valid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+          return;
+        }
+        updates.custom_fields = cfResult.sanitized;
+      }
 
       const project = await projectModel.updateProject(
         param(req.params.projectId),

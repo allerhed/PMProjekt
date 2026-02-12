@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjects, useCreateProject } from '../../hooks/useProjects';
+import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import Button from '../../components/ui/Button';
 import Card, { CardBody } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
@@ -8,6 +9,7 @@ import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 
 export default function ProjectListPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -134,14 +136,20 @@ function ProjectCard({ project }: { project: any }) {
 
 function CreateProjectModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [form, setForm] = useState({ name: '', description: '', address: '', startDate: '', targetCompletionDate: '' });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const createProject = useCreateProject();
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('project');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await createProject.mutateAsync(form);
+      await createProject.mutateAsync({
+        ...form,
+        ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
+      });
       onClose();
       setForm({ name: '', description: '', address: '', startDate: '', targetCompletionDate: '' });
+      setCustomFields({});
     } catch {
       // Error handled by mutation
     }
@@ -183,6 +191,11 @@ function CreateProjectModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             onChange={(e) => setForm((p) => ({ ...p, targetCompletionDate: e.target.value }))}
           />
         </div>
+        <CustomFieldsRenderer
+          definitions={cfDefinitions}
+          values={customFields}
+          onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={createProject.isPending}>Create Project</Button>

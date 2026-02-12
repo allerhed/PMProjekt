@@ -10,10 +10,11 @@ interface SidebarProps {
 
 const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderIcon },
-  { to: '/products', label: 'Products', icon: PackageIcon },
 ];
 
 const adminItems = [
+  { to: '/products', label: 'Products', icon: PackageIcon },
+  { to: '/admin/form-builder', label: 'Form Builder', icon: FormIcon },
   { to: '/admin/users', label: 'Users', icon: UsersIcon },
   { to: '/admin/dashboard', label: 'Dashboard', icon: ChartIcon },
   { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
@@ -137,6 +138,14 @@ function PackageIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  );
+}
+
+function FormIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
     </svg>
   );
 }

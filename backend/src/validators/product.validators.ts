@@ -6,6 +6,7 @@ export const createProductSchema = z.object({
   description: z.string().optional(),
   link: z.string().url('Must be a valid URL').max(500).optional().or(z.literal('')),
   comment: z.string().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateProductSchema = z.object({
@@ -14,6 +15,7 @@ export const updateProductSchema = z.object({
   description: z.string().optional().nullable(),
   link: z.string().url('Must be a valid URL').max(500).optional().nullable().or(z.literal('')),
   comment: z.string().optional().nullable(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const addProductToTaskSchema = z.object({

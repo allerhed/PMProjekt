@@ -13,6 +13,7 @@ export interface UserRow {
   failed_login_attempts: number;
   locked_until: Date | null;
   last_login_at: Date | null;
+  custom_fields: Record<string, unknown> | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -24,11 +25,12 @@ export async function createUser(data: {
   firstName: string;
   lastName: string;
   role: UserRole;
+  customFields?: Record<string, unknown>;
 }): Promise<UserRow> {
   const result = await pool.query(
-    `INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [data.organizationId, data.email, data.passwordHash, data.firstName, data.lastName, data.role],
+    `INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role, custom_fields)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [data.organizationId, data.email, data.passwordHash, data.firstName, data.lastName, data.role, JSON.stringify(data.customFields || {})],
   );
   return result.rows[0];
 }
@@ -81,7 +83,7 @@ export async function findUsersByOrganization(
 
 export async function updateUser(
   id: string,
-  updates: Partial<Pick<UserRow, 'first_name' | 'last_name' | 'role' | 'is_active' | 'password_hash'>>,
+  updates: Partial<Pick<UserRow, 'first_name' | 'last_name' | 'role' | 'is_active' | 'password_hash' | 'custom_fields'>>,
 ): Promise<UserRow | null> {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -90,7 +92,7 @@ export async function updateUser(
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
       fields.push(`${key} = $${paramIndex}`);
-      values.push(value);
+      values.push(key === 'custom_fields' ? JSON.stringify(value) : value);
       paramIndex++;
     }
   }

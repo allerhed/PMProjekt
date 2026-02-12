@@ -9,6 +9,7 @@ import { UserRole } from '../types';
 import { createTaskSchema, updateTaskSchema } from '../validators/task.validators';
 import * as taskModel from '../models/task.model';
 import * as projectModel from '../models/project.model';
+import { validateCustomFields } from '../services/customFieldValidation.service';
 import { param } from '../utils/params';
 
 const router = Router({ mergeParams: true });
@@ -80,6 +81,17 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response,
   try {
     if (!(await verifyProjectAccess(req, res))) return;
 
+    // Validate custom fields if provided
+    let sanitizedCustomFields: Record<string, unknown> | undefined;
+    if (req.body.customFields) {
+      const cfResult = await validateCustomFields(req.user!.organizationId, 'task', req.body.customFields);
+      if (!cfResult.valid) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+        return;
+      }
+      sanitizedCustomFields = cfResult.sanitized;
+    }
+
     const task = await taskModel.createTask({
       projectId: param(req.params.projectId),
       blueprintId: req.body.blueprintId,
@@ -91,6 +103,7 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response,
       locationY: req.body.locationY,
       assignedToUser: req.body.assignedToUser,
       assignedToContractorEmail: req.body.assignedToContractorEmail,
+      customFields: sanitizedCustomFields,
       createdBy: req.user!.userId,
     });
 
@@ -157,6 +170,16 @@ router.patch('/:taskId', validate(updateTaskSchema), async (req: Request, res: R
       } else if (req.body.status === 'verified') {
         req.body.verifiedAt = new Date().toISOString();
       }
+    }
+
+    // Validate custom fields if provided
+    if (req.body.customFields) {
+      const cfResult = await validateCustomFields(req.user!.organizationId, 'task', req.body.customFields);
+      if (!cfResult.valid) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+        return;
+      }
+      req.body.customFields = cfResult.sanitized;
     }
 
     const task = await taskModel.updateTask(param(req.params.taskId), req.body);

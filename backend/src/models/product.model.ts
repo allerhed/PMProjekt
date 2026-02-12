@@ -10,6 +10,7 @@ export interface ProductRow {
   thumbnail_url: string | null;
   link: string | null;
   comment: string | null;
+  custom_fields: Record<string, unknown> | null;
   created_by: string | null;
   created_at: Date;
   updated_at: Date;
@@ -96,11 +97,12 @@ export async function createProduct(data: {
   thumbnailUrl?: string;
   link?: string;
   comment?: string;
+  customFields?: Record<string, unknown>;
   createdBy: string;
 }): Promise<ProductRow> {
   const result = await pool.query(
-    `INSERT INTO products (organization_id, product_id, name, description, image_url, thumbnail_url, link, comment, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    `INSERT INTO products (organization_id, product_id, name, description, image_url, thumbnail_url, link, comment, custom_fields, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [
       data.organizationId,
       data.productId || null,
@@ -110,6 +112,7 @@ export async function createProduct(data: {
       data.thumbnailUrl || null,
       data.link || null,
       data.comment || null,
+      JSON.stringify(data.customFields || {}),
       data.createdBy,
     ],
   );
@@ -128,6 +131,7 @@ export async function updateProduct(
     thumbnailUrl: 'thumbnail_url',
     link: 'link',
     comment: 'comment',
+    customFields: 'custom_fields',
   };
 
   const setClauses: string[] = [];
@@ -138,7 +142,7 @@ export async function updateProduct(
     const dbField = fieldMap[key];
     if (dbField) {
       setClauses.push(`${dbField} = $${paramIndex}`);
-      values.push(value);
+      values.push(dbField === 'custom_fields' ? JSON.stringify(value) : value);
       paramIndex++;
     }
   }

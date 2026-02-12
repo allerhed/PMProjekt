@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } from '../../hooks/useProducts';
+import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { productApi } from '../../services/product.api';
 import type { Product } from '../../types';
@@ -8,6 +9,7 @@ import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 
 const initialForm = { name: '', productId: '', description: '', link: '', comment: '' };
 
@@ -18,6 +20,7 @@ export default function ProductListPage() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [form, setForm] = useState(initialForm);
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
 
   const { data, isLoading } = useProducts({ search: search || undefined, page, limit: 50 });
   const createProduct = useCreateProduct();
@@ -29,6 +32,7 @@ export default function ProductListPage() {
 
   function openCreate() {
     setForm(initialForm);
+    setCustomFields({});
     setShowCreate(true);
   }
 
@@ -40,6 +44,7 @@ export default function ProductListPage() {
       link: product.link || '',
       comment: product.comment || '',
     });
+    setCustomFields(product.customFields || {});
     setEditProduct(product);
   }
 
@@ -52,9 +57,11 @@ export default function ProductListPage() {
         description: form.description || undefined,
         link: form.link || undefined,
         comment: form.comment || undefined,
+        ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       });
       setShowCreate(false);
       setForm(initialForm);
+      setCustomFields({});
     } catch {
       // Error handled by mutation
     }
@@ -72,10 +79,12 @@ export default function ProductListPage() {
           description: form.description || null,
           link: form.link || null,
           comment: form.comment || null,
+          ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
         },
       });
       setEditProduct(null);
       setForm(initialForm);
+      setCustomFields({});
     } catch {
       // Error handled by mutation
     }
@@ -173,10 +182,12 @@ export default function ProductListPage() {
       {/* Create Modal */}
       <ProductFormModal
         isOpen={showCreate}
-        onClose={() => { setShowCreate(false); setForm(initialForm); }}
+        onClose={() => { setShowCreate(false); setForm(initialForm); setCustomFields({}); }}
         title="Add Product"
         form={form}
         setForm={setForm}
+        customFields={customFields}
+        setCustomFields={setCustomFields}
         onSubmit={handleCreate}
         submitLabel="Create Product"
         loading={createProduct.isPending}
@@ -185,10 +196,12 @@ export default function ProductListPage() {
       {/* Edit Modal */}
       <ProductFormModal
         isOpen={!!editProduct}
-        onClose={() => { setEditProduct(null); setForm(initialForm); }}
+        onClose={() => { setEditProduct(null); setForm(initialForm); setCustomFields({}); }}
         title="Edit Product"
         form={form}
         setForm={setForm}
+        customFields={customFields}
+        setCustomFields={setCustomFields}
         onSubmit={handleUpdate}
         submitLabel="Save Changes"
         loading={updateProduct.isPending}
@@ -258,6 +271,8 @@ function ProductFormModal({
   title,
   form,
   setForm,
+  customFields,
+  setCustomFields,
   onSubmit,
   submitLabel,
   loading,
@@ -268,12 +283,15 @@ function ProductFormModal({
   title: string;
   form: typeof initialForm;
   setForm: React.Dispatch<React.SetStateAction<typeof initialForm>>;
+  customFields: Record<string, unknown>;
+  setCustomFields: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   onSubmit: (e: React.FormEvent) => Promise<void>;
   submitLabel: string;
   loading: boolean;
   productId?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('product');
 
   const { state: uploadState, progress, upload, reset: resetUpload } = useFileUpload({
     onRequestUrl: useCallback(async (file: File) => {
@@ -343,6 +361,12 @@ function ProductFormModal({
               onChange={(e) => setForm((p) => ({ ...p, comment: e.target.value }))}
             />
           </div>
+
+          <CustomFieldsRenderer
+            definitions={cfDefinitions}
+            values={customFields}
+            onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
+          />
 
           {/* Image upload — only shown when editing (product has an ID) */}
           {productId && (

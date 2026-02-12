@@ -40,6 +40,7 @@ export interface User {
   isActive: boolean;
   organizationId: string;
   lastLoginAt: string | null;
+  customFields?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -72,6 +73,7 @@ export interface Project {
   thumbnailDownloadUrl: string | null;
   responsibleUserId: string | null;
   responsibleUserName: string | null;
+  customFields?: Record<string, unknown>;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -115,6 +117,7 @@ export interface Task {
   annotationWidth: number | null;
   annotationHeight: number | null;
   annotationPage: number | null;
+  customFields?: Record<string, unknown>;
 }
 
 export interface Blueprint {
@@ -176,6 +179,7 @@ export interface Product {
   thumbnailDownloadUrl: string | null;
   link: string | null;
   comment: string | null;
+  customFields?: Record<string, unknown>;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -215,4 +219,23 @@ export interface ApiResponse<T> {
     requestId: string;
     pagination?: PaginationMeta;
   };
+}
+
+// Custom Field types
+export type EntityType = 'project' | 'task' | 'product' | 'user';
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'textarea' | 'checkbox';
+
+export interface CustomFieldDefinition {
+  id: string;
+  organizationId: string;
+  entityType: EntityType;
+  fieldKey: string;
+  label: string;
+  fieldType: FieldType;
+  options: string[] | null;
+  isRequired: boolean;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

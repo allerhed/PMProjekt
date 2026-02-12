@@ -15,6 +15,7 @@ export const createTaskSchema = z.object({
   annotationWidth: z.number().min(0).max(1).nullable().optional(),
   annotationHeight: z.number().min(0).max(1).nullable().optional(),
   annotationPage: z.number().int().min(1).nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -33,6 +34,7 @@ export const updateTaskSchema = z.object({
   annotationWidth: z.number().min(0).max(1).nullable().optional(),
   annotationHeight: z.number().min(0).max(1).nullable().optional(),
   annotationPage: z.number().int().min(1).nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const taskFiltersSchema = z.object({

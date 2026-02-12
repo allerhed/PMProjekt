@@ -8,6 +8,7 @@ import { logAuditAction } from '../services/audit.service';
 import { UserRole } from '../types';
 import { hashPassword, comparePassword, validatePasswordPolicy } from '../utils/password';
 import * as userModel from '../models/user.model';
+import { validateCustomFields } from '../services/customFieldValidation.service';
 import { z } from 'zod';
 import { param } from '../utils/params';
 
@@ -19,6 +20,7 @@ const createUserSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   role: z.enum(['org_admin', 'project_manager', 'field_user']),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const updateUserSchema = z.object({
@@ -29,6 +31,7 @@ const updateUserSchema = z.object({
   isActive: z.boolean().optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 // GET /api/v1/users — list users in org
@@ -81,6 +84,17 @@ router.post(
       const tempPassword = `Temp${Date.now()}!`;
       const passwordHash = await hashPassword(tempPassword);
 
+      // Validate custom fields if provided
+      let sanitizedCustomFields: Record<string, unknown> | undefined;
+      if (req.body.customFields) {
+        const cfResult = await validateCustomFields(req.user!.organizationId, 'user', req.body.customFields);
+        if (!cfResult.valid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+          return;
+        }
+        sanitizedCustomFields = cfResult.sanitized;
+      }
+
       const user = await userModel.createUser({
         organizationId: req.user!.organizationId,
         email: req.body.email,
@@ -88,6 +102,7 @@ router.post(
         firstName: req.body.firstName,
         lastName: req.body.lastName,
         role: req.body.role as UserRole,
+        customFields: sanitizedCustomFields,
       });
 
       logAuditAction({
@@ -206,6 +221,16 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
       }
 
       updates.password_hash = await hashPassword(req.body.newPassword);
+    }
+
+    // Validate custom fields if provided
+    if (req.body.customFields) {
+      const cfResult = await validateCustomFields(req.user!.organizationId, 'user', req.body.customFields);
+      if (!cfResult.valid) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+        return;
+      }
+      updates.custom_fields = cfResult.sanitized;
     }
 
     const updated = await userModel.updateUser(param(req.params.userId), updates);

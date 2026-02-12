@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUsers, useCreateUser, useUpdateUser } from '../../hooks/useUsers';
+import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
@@ -7,6 +8,7 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
+import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 
 const ROLE_OPTIONS = [
   { value: 'org_admin', label: 'Org Admin' },
@@ -104,14 +106,20 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   const [form, setForm] = useState({
     email: '', firstName: '', lastName: '', role: 'field_user', password: '',
   });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const createUser = useCreateUser();
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('user');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await createUser.mutateAsync(form);
+      await createUser.mutateAsync({
+        ...form,
+        ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
+      });
       onClose();
       setForm({ email: '', firstName: '', lastName: '', role: 'field_user', password: '' });
+      setCustomFields({});
     } catch {
       // Error handled by mutation
     }
@@ -154,6 +162,11 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
           required
           helpText="The user should change this on first login."
+        />
+        <CustomFieldsRenderer
+          definitions={cfDefinitions}
+          values={customFields}
+          onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
         />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTask, useUpdateTask } from '../../hooks/useTasks';
 import { useComments, useCreateComment } from '../../hooks/useComments';
 import { useProducts, useTaskProducts, useAddProductToTask, useRemoveProductFromTask } from '../../hooks/useProducts';
+import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import { uploadApi } from '../../services/upload.api';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -15,6 +16,7 @@ import Select from '../../components/ui/Select';
 import PhotoUploader from '../../components/uploads/PhotoUploader';
 import PhotoGallery from '../../components/photos/PhotoGallery';
 import PdfAnnotationViewer from '../../components/blueprints/PdfAnnotationViewer';
+import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 import type { Annotation } from '../../components/blueprints/PdfAnnotationViewer';
 import { format } from 'date-fns';
 
@@ -226,6 +228,13 @@ export default function TaskDetailPage() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Custom Fields */}
+      <TaskCustomFields
+        projectId={projectId!}
+        taskId={taskId!}
+        customFields={task.custom_fields || {}}
+      />
 
       {/* Blueprint Annotation */}
       <Card className="mb-6">
@@ -504,5 +513,72 @@ export default function TaskDetailPage() {
         </CardBody>
       </Card>
     </div>
+  );
+}
+
+function TaskCustomFields({
+  projectId,
+  taskId,
+  customFields: initialCustomFields,
+}: {
+  projectId: string;
+  taskId: string;
+  customFields: Record<string, unknown>;
+}) {
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('task');
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>(initialCustomFields);
+  const [editing, setEditing] = useState(false);
+  const updateTask = useUpdateTask(projectId);
+
+  if (cfDefinitions.length === 0) return null;
+
+  async function handleSave() {
+    await updateTask.mutateAsync({
+      taskId,
+      data: { customFields },
+    });
+    setEditing(false);
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Custom Fields</h2>
+          {!editing ? (
+            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => { setEditing(false); setCustomFields(initialCustomFields); }}>Cancel</Button>
+              <Button size="sm" onClick={handleSave} loading={updateTask.isPending}>Save</Button>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardBody>
+        {editing ? (
+          <CustomFieldsRenderer
+            definitions={cfDefinitions}
+            values={customFields}
+            onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {cfDefinitions.map((def: any) => (
+              <div key={def.id}>
+                <span className="text-gray-500">{def.label}:</span>{' '}
+                <span className="text-gray-900">
+                  {customFields[def.fieldKey] !== undefined && customFields[def.fieldKey] !== null && customFields[def.fieldKey] !== ''
+                    ? def.fieldType === 'checkbox'
+                      ? customFields[def.fieldKey] ? 'Yes' : 'No'
+                      : String(customFields[def.fieldKey])
+                    : '-'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }

@@ -7,6 +7,7 @@ export const createProjectSchema = z.object({
   startDate: z.string().optional(),
   targetCompletionDate: z.string().optional(),
   responsibleUserId: z.string().uuid().nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateProjectSchema = z.object({
@@ -17,4 +18,5 @@ export const updateProjectSchema = z.object({
   startDate: z.string().nullable().optional(),
   targetCompletionDate: z.string().nullable().optional(),
   responsibleUserId: z.string().uuid().nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });

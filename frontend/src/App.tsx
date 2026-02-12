@@ -18,6 +18,7 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import OrgSettingsPage from './pages/admin/OrgSettingsPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import ProductListPage from './pages/products/ProductListPage';
+import FormBuilderPage from './pages/admin/FormBuilderPage';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
 
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="/admin/users" element={<UserManagementPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/settings" element={<OrgSettingsPage />} />
+        <Route path="/admin/form-builder" element={<FormBuilderPage />} />
       </Route>
 
       {/* Default redirect */}

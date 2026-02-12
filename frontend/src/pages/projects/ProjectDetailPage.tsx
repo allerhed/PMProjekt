@@ -4,6 +4,7 @@ import { useProject, useUpdateProject } from '../../hooks/useProjects';
 import { useTasks, useCreateTask } from '../../hooks/useTasks';
 import { useUsers } from '../../hooks/useUsers';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import { useAuthStore } from '../../stores/authStore';
 import { UserRole } from '../../types';
 import { projectApi } from '../../services/project.api';
@@ -17,6 +18,7 @@ import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import BlueprintList from '../../components/blueprints/BlueprintList';
 import ProtocolPage from '../protocols/ProtocolPage';
+import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
@@ -261,7 +263,9 @@ function TaskRow({ task, onClick }: { task: any; onClick: () => void }) {
 
 function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onClose: () => void; projectId: string }) {
   const [form, setForm] = useState({ title: '', description: '', priority: 'normal', trade: '', assignedToContractorEmail: '' });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const createTask = useCreateTask(projectId);
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('task');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -272,9 +276,11 @@ function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onCl
         priority: form.priority,
         trade: form.trade || undefined,
         assignedToContractorEmail: form.assignedToContractorEmail || undefined,
+        ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       });
       onClose();
       setForm({ title: '', description: '', priority: 'normal', trade: '', assignedToContractorEmail: '' });
+      setCustomFields({});
     } catch {
       // Error handled by mutation
     }
@@ -317,6 +323,11 @@ function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onCl
           onChange={(e) => setForm((p) => ({ ...p, assignedToContractorEmail: e.target.value }))}
           placeholder="contractor@example.com"
         />
+        <CustomFieldsRenderer
+          definitions={cfDefinitions}
+          values={customFields}
+          onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={createTask.isPending}>Create Task</Button>
@@ -336,9 +347,11 @@ function EditProjectModal({ isOpen, onClose, project }: { isOpen: boolean; onClo
     targetCompletionDate: project.target_completion_date || '',
     responsibleUserId: project.responsible_user_id || '',
   });
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>(project.custom_fields || {});
 
   const updateProject = useUpdateProject();
   const { data: usersData } = useUsers({ limit: 100 });
+  const { data: cfDefinitions = [] } = useCustomFieldDefinitions('project');
   const users = usersData?.data?.users || [];
   const userOptions = [
     { value: '', label: 'None' },
@@ -379,6 +392,7 @@ function EditProjectModal({ isOpen, onClose, project }: { isOpen: boolean; onClo
           startDate: form.startDate || null,
           targetCompletionDate: form.targetCompletionDate || null,
           responsibleUserId: form.responsibleUserId || null,
+          ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
         },
       });
       onClose();
@@ -490,6 +504,11 @@ function EditProjectModal({ isOpen, onClose, project }: { isOpen: boolean; onClo
             onChange={(e) => setForm((p) => ({ ...p, targetCompletionDate: e.target.value }))}
           />
         </div>
+        <CustomFieldsRenderer
+          definitions={cfDefinitions}
+          values={customFields}
+          onChange={(key, value) => setCustomFields((prev) => ({ ...prev, [key]: value }))}
+        />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={updateProject.isPending}>Save Changes</Button>

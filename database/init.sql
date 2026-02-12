@@ -43,6 +43,7 @@ CREATE TABLE users (
   failed_login_attempts INT DEFAULT 0,
   locked_until TIMESTAMP WITH TIME ZONE,
   last_login_at TIMESTAMP WITH TIME ZONE,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -66,6 +67,7 @@ CREATE TABLE projects (
   image_url VARCHAR(500),
   thumbnail_url VARCHAR(500),
   responsible_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -121,6 +123,7 @@ CREATE TABLE tasks (
   annotation_width FLOAT,
   annotation_height FLOAT,
   annotation_page INTEGER,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
   UNIQUE(project_id, task_number)
 );
 
@@ -223,6 +226,7 @@ CREATE TABLE products (
   thumbnail_url VARCHAR(500),
   link VARCHAR(500),
   comment TEXT,
+  custom_fields JSONB DEFAULT '{}'::jsonb,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -245,6 +249,27 @@ CREATE TABLE task_products (
 
 CREATE INDEX idx_task_products_task ON task_products(task_id);
 CREATE INDEX idx_task_products_product ON task_products(product_id);
+
+-- ============================================================================
+-- Custom field definitions table (organization-scoped form builder)
+-- ============================================================================
+CREATE TABLE custom_field_definitions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('project', 'task', 'product', 'user')),
+  field_key VARCHAR(100) NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  field_type VARCHAR(20) NOT NULL CHECK (field_type IN ('text', 'number', 'date', 'select', 'textarea', 'checkbox')),
+  options JSONB,
+  is_required BOOLEAN DEFAULT false,
+  display_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(organization_id, entity_type, field_key)
+);
+
+CREATE INDEX idx_cfd_org_entity_active ON custom_field_definitions(organization_id, entity_type, is_active);
 
 -- ============================================================================
 -- Trigger function to automatically update the updated_at column
@@ -275,4 +300,8 @@ CREATE TRIGGER update_tasks_updated_at
 
 CREATE TRIGGER update_products_updated_at
   BEFORE UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_custom_field_definitions_updated_at
+  BEFORE UPDATE ON custom_field_definitions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

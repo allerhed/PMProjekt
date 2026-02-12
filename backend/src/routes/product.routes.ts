@@ -14,6 +14,7 @@ import * as productModel from '../models/product.model';
 import * as storageService from '../services/storage.service';
 import * as storageTracking from '../services/storageTracking.service';
 import * as thumbnailService from '../services/thumbnail.service';
+import { validateCustomFields } from '../services/customFieldValidation.service';
 import { param } from '../utils/params';
 
 const router = Router({ mergeParams: true });
@@ -62,6 +63,17 @@ router.post(
   validate(createProductSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Validate custom fields if provided
+      let sanitizedCustomFields: Record<string, unknown> | undefined;
+      if (req.body.customFields) {
+        const cfResult = await validateCustomFields(req.user!.organizationId, 'product', req.body.customFields);
+        if (!cfResult.valid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+          return;
+        }
+        sanitizedCustomFields = cfResult.sanitized;
+      }
+
       const product = await productModel.createProduct({
         organizationId: req.user!.organizationId,
         productId: req.body.productId,
@@ -69,6 +81,7 @@ router.post(
         description: req.body.description,
         link: req.body.link,
         comment: req.body.comment,
+        customFields: sanitizedCustomFields,
         createdBy: req.user!.userId,
       });
 
@@ -133,6 +146,16 @@ router.patch(
       if (!existing) {
         sendError(res, 404, 'NOT_FOUND', 'Product not found');
         return;
+      }
+
+      // Validate custom fields if provided
+      if (req.body.customFields) {
+        const cfResult = await validateCustomFields(req.user!.organizationId, 'product', req.body.customFields);
+        if (!cfResult.valid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Custom field validation failed', { customFieldErrors: cfResult.errors });
+          return;
+        }
+        req.body.customFields = cfResult.sanitized;
       }
 
       const product = await productModel.updateProduct(param(req.params.productId), req.body);

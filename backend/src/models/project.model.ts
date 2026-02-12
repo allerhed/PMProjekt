@@ -12,6 +12,7 @@ export interface ProjectRow {
   image_url: string | null;
   thumbnail_url: string | null;
   responsible_user_id: string | null;
+  custom_fields: Record<string, unknown> | null;
   created_by: string;
   created_at: Date;
   updated_at: Date;
@@ -124,16 +125,19 @@ export async function createProject(data: {
   startDate?: string;
   targetCompletionDate?: string;
   responsibleUserId?: string;
+  customFields?: Record<string, unknown>;
   createdBy: string;
 }): Promise<ProjectRow> {
   const result = await pool.query(
-    `INSERT INTO projects (organization_id, name, description, address, status, start_date, target_completion_date, responsible_user_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    `INSERT INTO projects (organization_id, name, description, address, status, start_date, target_completion_date, responsible_user_id, custom_fields, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [
       data.organizationId, data.name, data.description || null,
       data.address || null, data.status || 'active',
       data.startDate || null, data.targetCompletionDate || null,
-      data.responsibleUserId || null, data.createdBy,
+      data.responsibleUserId || null,
+      JSON.stringify(data.customFields || {}),
+      data.createdBy,
     ],
   );
   return result.rows[0];
@@ -142,7 +146,7 @@ export async function createProject(data: {
 export async function updateProject(
   id: string,
   organizationId: string,
-  updates: Partial<Pick<ProjectRow, 'name' | 'description' | 'address' | 'status' | 'start_date' | 'target_completion_date' | 'image_url' | 'thumbnail_url' | 'responsible_user_id'>>,
+  updates: Partial<Pick<ProjectRow, 'name' | 'description' | 'address' | 'status' | 'start_date' | 'target_completion_date' | 'image_url' | 'thumbnail_url' | 'responsible_user_id' | 'custom_fields'>>,
 ): Promise<ProjectRow | null> {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -151,7 +155,7 @@ export async function updateProject(
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
       fields.push(`${key} = $${paramIndex}`);
-      values.push(value);
+      values.push(key === 'custom_fields' ? JSON.stringify(value) : value);
       paramIndex++;
     }
   }
