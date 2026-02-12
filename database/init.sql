@@ -207,6 +207,42 @@ CREATE INDEX idx_reset_tokens_user ON password_reset_tokens(user_id);
 CREATE INDEX idx_reset_tokens_expiry ON password_reset_tokens(expires_at);
 
 -- ============================================================================
+-- Products table (organization-scoped product catalog)
+-- ============================================================================
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  product_id VARCHAR(100),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  image_url VARCHAR(500),
+  thumbnail_url VARCHAR(500),
+  link VARCHAR(500),
+  comment TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_products_org ON products(organization_id);
+CREATE INDEX idx_products_org_product_id ON products(organization_id, product_id);
+
+-- ============================================================================
+-- Task products junction table (many-to-many: tasks <-> products)
+-- ============================================================================
+CREATE TABLE task_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  added_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(task_id, product_id)
+);
+
+CREATE INDEX idx_task_products_task ON task_products(task_id);
+CREATE INDEX idx_task_products_product ON task_products(product_id);
+
+-- ============================================================================
 -- Trigger function to automatically update the updated_at column
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -231,4 +267,8 @@ CREATE TRIGGER update_projects_updated_at
 
 CREATE TRIGGER update_tasks_updated_at
   BEFORE UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_products_updated_at
+  BEFORE UPDATE ON products
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

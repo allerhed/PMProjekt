@@ -3,10 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTask, useUpdateTask } from '../../hooks/useTasks';
 import { useComments, useCreateComment } from '../../hooks/useComments';
+import { useProducts, useTaskProducts, useAddProductToTask, useRemoveProductFromTask } from '../../hooks/useProducts';
 import { uploadApi } from '../../services/upload.api';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
+import Modal from '../../components/ui/Modal';
+import Input from '../../components/ui/Input';
 import Spinner from '../../components/ui/Spinner';
 import Select from '../../components/ui/Select';
 import PhotoUploader from '../../components/uploads/PhotoUploader';
@@ -39,6 +42,14 @@ export default function TaskDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [drawMode, setDrawMode] = useState(false);
   const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>('');
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+
+  // Task products
+  const { data: taskProducts = [], isLoading: taskProductsLoading } = useTaskProducts(projectId!, taskId!);
+  const addProductToTask = useAddProductToTask(projectId!);
+  const removeProductFromTask = useRemoveProductFromTask(projectId!);
+  const { data: allProductsData } = useProducts({ search: productSearch || undefined, limit: 50 });
 
   // Fetch blueprints for the project
   const { data: blueprints = [] } = useQuery({
@@ -320,6 +331,128 @@ export default function TaskDetailPage() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Products Used */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">
+              Products Used ({Array.isArray(taskProducts) ? taskProducts.length : 0})
+            </h2>
+            <Button size="sm" onClick={() => { setShowProductPicker(true); setProductSearch(''); }}>
+              Add Product
+            </Button>
+          </div>
+        </CardHeader>
+        <CardBody>
+          {taskProductsLoading ? (
+            <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+          ) : Array.isArray(taskProducts) && taskProducts.length > 0 ? (
+            <div className="space-y-3">
+              {taskProducts.map((tp: any) => (
+                <div key={tp.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 group">
+                  {tp.thumbnail_download_url || tp.image_download_url ? (
+                    <img
+                      src={tp.thumbnail_download_url || tp.image_download_url}
+                      alt={tp.product_name}
+                      className="w-10 h-10 rounded object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900">{tp.product_name}</div>
+                    {tp.product_product_id && (
+                      <div className="text-xs text-gray-500">ID: {tp.product_product_id}</div>
+                    )}
+                  </div>
+                  {tp.product_link && (
+                    <a
+                      href={tp.product_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline shrink-0"
+                    >
+                      Link
+                    </a>
+                  )}
+                  <button
+                    onClick={() => removeProductFromTask.mutateAsync({ taskId: taskId!, productId: tp.product_id })}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0"
+                    title="Remove product"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No products linked to this task.</p>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Product Picker Modal */}
+      <Modal isOpen={showProductPicker} onClose={() => setShowProductPicker(false)} title="Add Product to Task" size="md">
+        <div className="mb-4">
+          <Input
+            placeholder="Search products..."
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+          />
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {(() => {
+            const allProducts = allProductsData?.data?.products ?? [];
+            const linkedIds = new Set((Array.isArray(taskProducts) ? taskProducts : []).map((tp: any) => tp.product_id));
+            const available = allProducts.filter((p: any) => !linkedIds.has(p.id));
+
+            if (available.length === 0) {
+              return (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  {allProducts.length === 0 ? 'No products in catalog. Add products first.' : 'All products are already linked.'}
+                </p>
+              );
+            }
+
+            return available.map((product: any) => (
+              <button
+                key={product.id}
+                onClick={async () => {
+                  await addProductToTask.mutateAsync({ taskId: taskId!, productId: product.id });
+                  setShowProductPicker(false);
+                }}
+                className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg text-left"
+              >
+                {product.thumbnail_download_url || product.image_download_url ? (
+                  <img
+                    src={product.thumbnail_download_url || product.image_download_url}
+                    alt={product.name}
+                    className="w-10 h-10 rounded object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                  {product.product_id && <div className="text-xs text-gray-500">ID: {product.product_id}</div>}
+                  {product.description && <div className="text-xs text-gray-500 truncate">{product.description}</div>}
+                </div>
+              </button>
+            ));
+          })()}
+        </div>
+      </Modal>
 
       {/* Comments */}
       <Card>

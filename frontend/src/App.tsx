@@ -17,6 +17,7 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import OrgSettingsPage from './pages/admin/OrgSettingsPage';
 import ProfilePage from './pages/profile/ProfilePage';
+import ProductListPage from './pages/products/ProductListPage';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
 
@@ -66,6 +67,7 @@ function AppRoutes() {
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
+        <Route path="/products" element={<ProductListPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/admin/users" element={<UserManagementPage />} />
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />

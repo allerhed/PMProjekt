@@ -99,6 +99,7 @@ export interface Task {
   createdBy: { id: string; name: string };
   photoCount: number;
   commentCount: number;
+  productCount: number;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -155,6 +156,40 @@ export interface Protocol {
   status: 'generating' | 'completed' | 'failed';
   generatedBy: string;
   generatedAt: string;
+}
+
+export interface Product {
+  id: string;
+  organizationId: string;
+  productId: string | null;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  imageDownloadUrl: string | null;
+  thumbnailDownloadUrl: string | null;
+  link: string | null;
+  comment: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskProduct {
+  id: string;
+  taskId: string;
+  productId: string;
+  addedBy: string | null;
+  createdAt: string;
+  productName: string;
+  productProductId: string | null;
+  productDescription: string | null;
+  productImageUrl: string | null;
+  productThumbnailUrl: string | null;
+  productLink: string | null;
+  productComment: string | null;
+  imageDownloadUrl: string | null;
+  thumbnailDownloadUrl: string | null;
 }
 
 // API response types

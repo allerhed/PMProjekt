@@ -29,6 +29,7 @@ export interface TaskRow {
 export interface TaskWithCounts extends TaskRow {
   photo_count: number;
   comment_count: number;
+  product_count: number;
   project_name?: string;
   creator_first_name?: string;
   creator_last_name?: string;
@@ -111,6 +112,7 @@ export async function findTasksByProject(
        p.name as project_name,
        COALESCE(ph.cnt, 0)::int as photo_count,
        COALESCE(cm.cnt, 0)::int as comment_count,
+       COALESCE(tp.cnt, 0)::int as product_count,
        cu.first_name as creator_first_name,
        cu.last_name as creator_last_name,
        au.first_name as assignee_first_name,
@@ -119,6 +121,7 @@ export async function findTasksByProject(
      JOIN projects p ON p.id = t.project_id
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_photos WHERE task_id = t.id) ph ON true
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_comments WHERE task_id = t.id) cm ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_products WHERE task_id = t.id) tp ON true
      LEFT JOIN users cu ON cu.id = t.created_by
      LEFT JOIN users au ON au.id = t.assigned_to_user
      WHERE ${where}
@@ -149,6 +152,7 @@ export async function findTaskById(
        p.name as project_name,
        COALESCE(ph.cnt, 0)::int as photo_count,
        COALESCE(cm.cnt, 0)::int as comment_count,
+       COALESCE(tp.cnt, 0)::int as product_count,
        cu.first_name as creator_first_name,
        cu.last_name as creator_last_name,
        au.first_name as assignee_first_name,
@@ -157,6 +161,7 @@ export async function findTaskById(
      JOIN projects p ON p.id = t.project_id
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_photos WHERE task_id = t.id) ph ON true
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_comments WHERE task_id = t.id) cm ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_products WHERE task_id = t.id) tp ON true
      LEFT JOIN users cu ON cu.id = t.created_by
      LEFT JOIN users au ON au.id = t.assigned_to_user
      WHERE ${conditions.join(' AND ')}`,
@@ -265,6 +270,7 @@ export async function findTasksByBlueprint(
        p.name as project_name,
        COALESCE(ph.cnt, 0)::int as photo_count,
        COALESCE(cm.cnt, 0)::int as comment_count,
+       COALESCE(tp.cnt, 0)::int as product_count,
        cu.first_name as creator_first_name,
        cu.last_name as creator_last_name,
        au.first_name as assignee_first_name,
@@ -273,6 +279,7 @@ export async function findTasksByBlueprint(
      JOIN projects p ON p.id = t.project_id
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_photos WHERE task_id = t.id) ph ON true
      LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_comments WHERE task_id = t.id) cm ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_products WHERE task_id = t.id) tp ON true
      LEFT JOIN users cu ON cu.id = t.created_by
      LEFT JOIN users au ON au.id = t.assigned_to_user
      WHERE t.blueprint_id = $1 AND p.organization_id = $2

@@ -19,6 +19,8 @@ import taskPhotoRoutes from './routes/taskPhoto.routes';
 import protocolRoutes from './routes/protocol.routes';
 import organizationRoutes from './routes/organization.routes';
 import storageRoutes from './routes/storage.routes';
+import productRoutes from './routes/product.routes';
+import taskProductRoutes from './routes/taskProduct.routes';
 import config from './config';
 
 const app = express();
@@ -65,6 +67,8 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/storage', storageRoutes);
+app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/projects/:projectId/tasks/:taskId/products', taskProductRoutes);
 
 // Error handling
 app.use(notFoundHandler);

@@ -56,7 +56,7 @@ export interface PresignedUploadResult {
  * Pattern: {type}/{orgId}/{parentId}/{resourceId}/{filename}
  */
 export function buildS3Key(
-  type: 'blueprints' | 'photos' | 'protocols',
+  type: 'blueprints' | 'photos' | 'protocols' | 'product-images',
   orgId: string,
   parentId: string,
   resourceId: string,
