@@ -63,6 +63,9 @@ CREATE TABLE projects (
   status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
   start_date DATE,
   target_completion_date DATE,
+  image_url VARCHAR(500),
+  thumbnail_url VARCHAR(500),
+  responsible_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -70,6 +73,7 @@ CREATE TABLE projects (
 
 CREATE INDEX idx_projects_org_status ON projects(organization_id, status);
 CREATE INDEX idx_projects_dates ON projects(start_date, target_completion_date);
+CREATE INDEX idx_projects_responsible ON projects(responsible_user_id);
 
 -- ============================================================================
 -- Blueprints table

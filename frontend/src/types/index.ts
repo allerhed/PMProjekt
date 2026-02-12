@@ -66,6 +66,12 @@ export interface Project {
   status: ProjectStatus;
   startDate: string | null;
   targetCompletionDate: string | null;
+  imageUrl: string | null;
+  thumbnailUrl: string | null;
+  imageDownloadUrl: string | null;
+  thumbnailDownloadUrl: string | null;
+  responsibleUserId: string | null;
+  responsibleUserName: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

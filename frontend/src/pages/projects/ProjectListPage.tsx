@@ -88,7 +88,20 @@ function ProjectCard({ project }: { project: any }) {
     <Card hoverable onClick={() => navigate(`/projects/${project.id}`)}>
       <CardBody>
         <div className="flex items-start justify-between mb-3">
-          <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+          <div className="flex items-center gap-3 min-w-0">
+            {project.thumbnail_download_url || project.image_download_url ? (
+              <img
+                src={project.thumbnail_download_url || project.image_download_url}
+                alt={project.name}
+                className="w-10 h-10 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-primary-600 text-sm font-bold">{project.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+          </div>
           <Badge variant={statusVariant}>{project.status}</Badge>
         </div>
 

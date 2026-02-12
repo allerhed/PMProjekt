@@ -25,4 +25,14 @@ export const projectApi = {
     const res = await api.delete(`/projects/${id}`);
     return res.data;
   },
+
+  async requestImageUpload(projectId: string, data: { fileName: string; fileSize: number; mimeType: string }) {
+    const res = await api.post(`/projects/${projectId}/upload-url`, data);
+    return res.data.data;
+  },
+
+  async confirmImage(projectId: string) {
+    const res = await api.post(`/projects/${projectId}/confirm-image`);
+    return res.data.data;
+  },
 };

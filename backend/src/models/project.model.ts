@@ -9,6 +9,9 @@ export interface ProjectRow {
   status: string;
   start_date: string | null;
   target_completion_date: string | null;
+  image_url: string | null;
+  thumbnail_url: string | null;
+  responsible_user_id: string | null;
   created_by: string;
   created_at: Date;
   updated_at: Date;
@@ -20,6 +23,7 @@ export interface ProjectWithStats extends ProjectRow {
   in_progress_tasks: number;
   completed_tasks: number;
   verified_tasks: number;
+  responsible_user_name: string | null;
 }
 
 export async function findProjectsByOrganization(
@@ -52,8 +56,10 @@ export async function findProjectsByOrganization(
        COALESCE(ts.open, 0)::int as open_tasks,
        COALESCE(ts.in_progress, 0)::int as in_progress_tasks,
        COALESCE(ts.completed, 0)::int as completed_tasks,
-       COALESCE(ts.verified, 0)::int as verified_tasks
+       COALESCE(ts.verified, 0)::int as verified_tasks,
+       CASE WHEN ru.id IS NOT NULL THEN ru.first_name || ' ' || ru.last_name ELSE NULL END as responsible_user_name
      FROM projects p
+     LEFT JOIN users ru ON ru.id = p.responsible_user_id
      LEFT JOIN LATERAL (
        SELECT
          COUNT(*) as total,
@@ -90,8 +96,10 @@ export async function findProjectById(
        COALESCE(ts.open, 0)::int as open_tasks,
        COALESCE(ts.in_progress, 0)::int as in_progress_tasks,
        COALESCE(ts.completed, 0)::int as completed_tasks,
-       COALESCE(ts.verified, 0)::int as verified_tasks
+       COALESCE(ts.verified, 0)::int as verified_tasks,
+       CASE WHEN ru.id IS NOT NULL THEN ru.first_name || ' ' || ru.last_name ELSE NULL END as responsible_user_name
      FROM projects p
+     LEFT JOIN users ru ON ru.id = p.responsible_user_id
      LEFT JOIN LATERAL (
        SELECT
          COUNT(*) as total,
@@ -115,15 +123,17 @@ export async function createProject(data: {
   status?: string;
   startDate?: string;
   targetCompletionDate?: string;
+  responsibleUserId?: string;
   createdBy: string;
 }): Promise<ProjectRow> {
   const result = await pool.query(
-    `INSERT INTO projects (organization_id, name, description, address, status, start_date, target_completion_date, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    `INSERT INTO projects (organization_id, name, description, address, status, start_date, target_completion_date, responsible_user_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
     [
       data.organizationId, data.name, data.description || null,
       data.address || null, data.status || 'active',
-      data.startDate || null, data.targetCompletionDate || null, data.createdBy,
+      data.startDate || null, data.targetCompletionDate || null,
+      data.responsibleUserId || null, data.createdBy,
     ],
   );
   return result.rows[0];
@@ -132,7 +142,7 @@ export async function createProject(data: {
 export async function updateProject(
   id: string,
   organizationId: string,
-  updates: Partial<Pick<ProjectRow, 'name' | 'description' | 'address' | 'status' | 'start_date' | 'target_completion_date'>>,
+  updates: Partial<Pick<ProjectRow, 'name' | 'description' | 'address' | 'status' | 'start_date' | 'target_completion_date' | 'image_url' | 'thumbnail_url' | 'responsible_user_id'>>,
 ): Promise<ProjectRow | null> {
   const fields: string[] = [];
   const values: unknown[] = [];

@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useProject } from '../../hooks/useProjects';
+import { useProject, useUpdateProject } from '../../hooks/useProjects';
 import { useTasks, useCreateTask } from '../../hooks/useTasks';
+import { useUsers } from '../../hooks/useUsers';
+import { useFileUpload } from '../../hooks/useFileUpload';
+import { useAuthStore } from '../../stores/authStore';
+import { UserRole } from '../../types';
+import { projectApi } from '../../services/project.api';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Card, { CardBody } from '../../components/ui/Card';
@@ -28,6 +33,12 @@ const PRIORITY_OPTIONS = [
   { value: 'critical', label: 'Critical' },
 ];
 
+const PROJECT_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
+
 const statusBadge: Record<string, 'red' | 'yellow' | 'green' | 'blue'> = {
   open: 'red',
   in_progress: 'yellow',
@@ -46,10 +57,13 @@ export default function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { data: project, isLoading: projectLoading } = useProject(projectId!);
+  const user = useAuthStore((s) => s.user);
+  const canEdit = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ORG_ADMIN || user?.role === UserRole.PROJECT_MANAGER;
 
   const [filters, setFilters] = useState<{ status?: string; search?: string }>({});
   const { data: taskData, isLoading: tasksLoading } = useTasks(projectId!, filters);
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showEditProject, setShowEditProject] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
 
   if (projectLoading) {
@@ -70,14 +84,41 @@ export default function ProjectDetailPage() {
         <button onClick={() => navigate('/projects')} className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-flex items-center gap-1">
           &larr; Back to Projects
         </button>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-            {project.address && <p className="text-gray-500 mt-1">{project.address}</p>}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            {/* Project Image */}
+            {project.thumbnail_download_url || project.image_download_url ? (
+              <img
+                src={project.thumbnail_download_url || project.image_download_url}
+                alt={project.name}
+                className="w-16 h-16 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-primary-600 text-xl font-bold">{project.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              {project.address && <p className="text-gray-500 mt-0.5">{project.address}</p>}
+              {project.description && <p className="text-sm text-gray-600 mt-1">{project.description}</p>}
+              {project.responsible_user_name && (
+                <p className="text-sm text-gray-500 mt-1">
+                  <span className="font-medium">Responsible:</span> {project.responsible_user_name}
+                </p>
+              )}
+            </div>
           </div>
-          <Badge variant={project.status === 'active' ? 'green' : 'gray'} size="md">
-            {project.status}
-          </Badge>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant={project.status === 'active' ? 'green' : 'gray'} size="md">
+              {project.status}
+            </Badge>
+            {canEdit && (
+              <Button variant="secondary" onClick={() => setShowEditProject(true)}>
+                Edit
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -165,6 +206,14 @@ export default function ProjectDetailPage() {
 
       {activeTab === 'protocols' && (
         <ProtocolPage projectId={projectId!} />
+      )}
+
+      {showEditProject && (
+        <EditProjectModal
+          isOpen={showEditProject}
+          onClose={() => setShowEditProject(false)}
+          project={project}
+        />
       )}
     </div>
   );
@@ -271,6 +320,179 @@ function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onCl
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={createTask.isPending}>Create Task</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EditProjectModal({ isOpen, onClose, project }: { isOpen: boolean; onClose: () => void; project: any }) {
+  const [form, setForm] = useState({
+    name: project.name || '',
+    description: project.description || '',
+    address: project.address || '',
+    status: project.status || 'active',
+    startDate: project.start_date || '',
+    targetCompletionDate: project.target_completion_date || '',
+    responsibleUserId: project.responsible_user_id || '',
+  });
+
+  const updateProject = useUpdateProject();
+  const { data: usersData } = useUsers({ limit: 100 });
+  const users = usersData?.data?.users || [];
+  const userOptions = [
+    { value: '', label: 'None' },
+    ...users.map((u: any) => ({
+      value: u.id,
+      label: `${u.first_name} ${u.last_name}`,
+    })),
+  ];
+
+  const handleRequestUrl = useCallback(async (file: File) => {
+    const result = await projectApi.requestImageUpload(project.id, {
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    });
+    return { uploadUrl: result.uploadUrl, resourceId: result.projectId };
+  }, [project.id]);
+
+  const handleConfirm = useCallback(async () => {
+    await projectApi.confirmImage(project.id);
+  }, [project.id]);
+
+  const { state: uploadState, progress, error: uploadError, upload } = useFileUpload({
+    onRequestUrl: handleRequestUrl,
+    onConfirm: handleConfirm,
+  });
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await updateProject.mutateAsync({
+        id: project.id,
+        data: {
+          name: form.name,
+          description: form.description || null,
+          address: form.address || null,
+          status: form.status,
+          startDate: form.startDate || null,
+          targetCompletionDate: form.targetCompletionDate || null,
+          responsibleUserId: form.responsibleUserId || null,
+        },
+      });
+      onClose();
+    } catch {
+      // Error handled by mutation
+    }
+  }
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      upload(file);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Project">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Project Image */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Project Image</label>
+          <div className="flex items-center gap-4">
+            {(project.thumbnail_download_url || project.image_download_url) && uploadState !== 'done' ? (
+              <img
+                src={project.thumbnail_download_url || project.image_download_url}
+                alt="Project"
+                className="w-16 h-16 rounded-lg object-cover border border-gray-200"
+              />
+            ) : uploadState === 'done' ? (
+              <div className="w-16 h-16 rounded-lg bg-green-100 flex items-center justify-center">
+                <span className="text-green-600 text-xs font-medium">Uploaded</span>
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                <span className="text-gray-400 text-xl font-bold">{project.name.charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <div className="flex-1">
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={handleImageSelect}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                disabled={uploadState === 'uploading' || uploadState === 'confirming'}
+              />
+              {uploadState === 'uploading' && (
+                <div className="mt-1">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="bg-primary-600 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">Uploading... {progress}%</p>
+                </div>
+              )}
+              {uploadState === 'confirming' && <p className="text-xs text-gray-500 mt-1">Processing...</p>}
+              {uploadState === 'done' && <p className="text-xs text-green-600 mt-1">Image uploaded successfully</p>}
+              {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
+            </div>
+          </div>
+        </div>
+
+        <Input
+          label="Project Name"
+          value={form.name}
+          onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+          required
+        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            placeholder="Project description"
+            rows={3}
+            className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 focus:border-primary-500 focus:ring-primary-500"
+          />
+        </div>
+        <Input
+          label="Address"
+          value={form.address}
+          onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+          placeholder="Project location"
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Status"
+            options={PROJECT_STATUS_OPTIONS}
+            value={form.status}
+            onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
+          />
+          <Select
+            label="Responsible"
+            options={userOptions}
+            value={form.responsibleUserId}
+            onChange={(e) => setForm((p) => ({ ...p, responsibleUserId: e.target.value }))}
+            placeholder="Select user"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Start Date"
+            type="date"
+            value={form.startDate}
+            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+          />
+          <Input
+            label="Target Completion"
+            type="date"
+            value={form.targetCompletionDate}
+            onChange={(e) => setForm((p) => ({ ...p, targetCompletionDate: e.target.value }))}
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={updateProject.isPending}>Save Changes</Button>
         </div>
       </form>
     </Modal>
