@@ -1,3 +1,4 @@
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useProject } from '../../hooks/useProjects';
 import { useTasks } from '../../hooks/useTasks';
@@ -22,51 +23,56 @@ const priorityBadge: Record<string, 'red' | 'yellow' | 'green' | 'gray'> = {
   low: 'green',
 };
 
-interface ProtocolPageProps {
-  projectId: string;
-}
+export default function ProjectReportPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
-export default function ProtocolPage({ projectId }: ProtocolPageProps) {
-  const { data: project, isLoading: projectLoading } = useProject(projectId);
-  const { data: taskData, isLoading: tasksLoading } = useTasks(projectId, { limit: 10000 });
+  // 1. Project details
+  const { data: project, isLoading: projectLoading } = useProject(projectId!);
+
+  // 2. All tasks
+  const { data: taskData, isLoading: tasksLoading } = useTasks(projectId!, { limit: 10000 });
   const tasks: any[] = taskData?.data?.tasks || [];
 
+  // 3. All blueprints
   const { data: blueprints = [], isLoading: blueprintsLoading } = useQuery({
     queryKey: ['blueprints', projectId],
-    queryFn: () => uploadApi.listBlueprints(projectId),
+    queryFn: () => uploadApi.listBlueprints(projectId!),
     enabled: !!projectId,
   });
 
-  // Derive annotations from tasks grouped by blueprint
-  const blueprintsWithAnnotations = (blueprints as any[]).map((bp: any) => {
-    const bpTasks = tasks.filter(
-      (t: any) =>
-        t.blueprint_id === bp.id &&
-        t.annotation_x != null &&
-        t.annotation_y != null &&
-        t.annotation_width != null &&
-        t.annotation_height != null &&
-        t.annotation_page != null,
-    );
-    const annotations: Annotation[] = bpTasks.map((t: any) => ({
-      taskId: t.id,
-      taskNumber: t.task_number,
-      status: t.status,
-      x: t.annotation_x,
-      y: t.annotation_y,
-      width: t.annotation_width,
-      height: t.annotation_height,
-      page: t.annotation_page,
-    }));
-    return { blueprint: bp, annotations };
-  });
+  // 4. Derive annotations from tasks (grouped by blueprint)
+  const blueprintsWithAnnotations = (blueprints as any[])
+    .map((bp: any) => {
+      const bpTasks = tasks.filter(
+        (t: any) =>
+          t.blueprint_id === bp.id &&
+          t.annotation_x != null &&
+          t.annotation_y != null &&
+          t.annotation_width != null &&
+          t.annotation_height != null &&
+          t.annotation_page != null,
+      );
+      const annotations: Annotation[] = bpTasks.map((t: any) => ({
+        taskId: t.id,
+        taskNumber: t.task_number,
+        status: t.status,
+        x: t.annotation_x,
+        y: t.annotation_y,
+        width: t.annotation_width,
+        height: t.annotation_height,
+        page: t.annotation_page,
+      }));
+      return { blueprint: bp, annotations };
+    })
+    .filter((item) => item.annotations.length > 0);
 
-  // Photos for tasks that have them
+  // 5. Photos for tasks that have them
   const tasksWithPhotos = tasks.filter((t: any) => t.photo_count > 0);
   const photoQueries = useQueries({
     queries: tasksWithPhotos.map((task: any) => ({
       queryKey: ['photos', projectId, task.id],
-      queryFn: () => uploadApi.listPhotos(projectId, task.id),
+      queryFn: () => uploadApi.listPhotos(projectId!, task.id),
       enabled: !!projectId,
     })),
   });
@@ -98,14 +104,25 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Navigation bar (hidden in print) */}
+      <div className="no-print flex items-center justify-between mb-8">
+        <button
+          onClick={() => navigate(`/projects/${projectId}`)}
+          className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+        >
+          &larr; Back to Project
+        </button>
+        <Button onClick={() => window.print()}>Download PDF</Button>
+      </div>
+
       {/* ================================================================ */}
       {/* SECTION 1: Project Description                                   */}
       {/* ================================================================ */}
       <div className="print-avoid-break mb-10">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">Project Protocol</h2>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Project Protocol</h1>
         <div className="border-b-2 border-gray-900 mb-6" />
 
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">{project.name}</h3>
+        <h2 className="text-xl font-semibold text-gray-900 mb-3">{project.name}</h2>
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm mb-4">
           {project.address && (
@@ -157,9 +174,9 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
       </div>
 
       {/* ================================================================ */}
-      {/* SECTION 2: Blueprints                                            */}
+      {/* SECTION 2: Blueprints with Annotations                           */}
       {/* ================================================================ */}
-      {(blueprints as any[]).length > 0 && (
+      {blueprintsWithAnnotations.length > 0 && (
         <div className="print-page-break mb-10">
           <h2 className="text-lg font-bold text-gray-900 mb-1">Blueprints</h2>
           <div className="border-b border-gray-300 mb-6" />
@@ -265,7 +282,7 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
         </div>
       )}
 
-      {/* Footer */}
+      {/* Footer (visible in print) */}
       <div className="border-t border-gray-200 pt-4 mt-8 text-xs text-gray-400 text-center">
         Generated {new Date().toLocaleDateString(undefined, {
           year: 'numeric',
@@ -274,11 +291,6 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
           hour: '2-digit',
           minute: '2-digit',
         })}
-      </div>
-
-      {/* Export as PDF button (hidden when printing) */}
-      <div className="no-print flex justify-center mt-8 mb-4">
-        <Button onClick={() => window.print()}>Export as PDF</Button>
       </div>
     </div>
   );

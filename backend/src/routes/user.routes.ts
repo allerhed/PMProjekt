@@ -20,6 +20,7 @@ const createUserSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   role: z.enum(['org_admin', 'project_manager', 'field_user']),
+  password: z.string().min(8).optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -80,9 +81,14 @@ router.post(
         return;
       }
 
-      // Generate a temporary password
-      const tempPassword = `Temp${Date.now()}!`;
-      const passwordHash = await hashPassword(tempPassword);
+      // Use admin-provided password or generate a temporary one
+      const passwordToHash = req.body.password || `Temp${Date.now()}!`;
+      const policyError = validatePasswordPolicy(passwordToHash, req.body.email);
+      if (policyError) {
+        sendError(res, 400, 'VALIDATION_ERROR', policyError);
+        return;
+      }
+      const passwordHash = await hashPassword(passwordToHash);
 
       // Validate custom fields if provided
       let sanitizedCustomFields: Record<string, unknown> | undefined;
@@ -172,11 +178,9 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
       delete req.body.isActive;
     }
 
-    // Only self can change email and password
+    // Only self can change own password with currentPassword; admins can set password for others
     if (!isSelf) {
-      delete req.body.email;
       delete req.body.currentPassword;
-      delete req.body.newPassword;
     }
 
     // Org scoping
@@ -203,17 +207,21 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
 
     // Handle password change
     if (req.body.newPassword) {
-      if (!req.body.currentPassword) {
-        sendError(res, 400, 'VALIDATION_ERROR', 'Current password is required to change password');
-        return;
+      if (isSelf) {
+        // Self-edit: require current password
+        if (!req.body.currentPassword) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Current password is required to change password');
+          return;
+        }
+
+        const isValid = await comparePassword(req.body.currentPassword, targetUser.password_hash);
+        if (!isValid) {
+          sendError(res, 400, 'VALIDATION_ERROR', 'Current password is incorrect');
+          return;
+        }
       }
 
-      const isValid = await comparePassword(req.body.currentPassword, targetUser.password_hash);
-      if (!isValid) {
-        sendError(res, 400, 'VALIDATION_ERROR', 'Current password is incorrect');
-        return;
-      }
-
+      // Both self and admin: validate policy
       const policyError = validatePasswordPolicy(req.body.newPassword, targetUser.email);
       if (policyError) {
         sendError(res, 400, 'VALIDATION_ERROR', policyError);

@@ -17,3 +17,40 @@
 body {
   @apply bg-gray-50 text-gray-900 antialiased;
 }
+
+@media print {
+  aside,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  .print-page-break {
+    break-before: page;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+}
