@@ -45,12 +45,20 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
       page: t.annotation_page,
     }));
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   async function handleDelete(e: React.MouseEvent, blueprintId: string) {
     e.stopPropagation();
-    await uploadApi.deleteBlueprint(projectId, blueprintId);
-    queryClient.invalidateQueries({ queryKey: ['blueprints', projectId] });
-    if (viewingBlueprint?.id === blueprintId) {
-      setViewingBlueprint(null);
+    setDeleteError(null);
+    try {
+      await uploadApi.deleteBlueprint(projectId, blueprintId);
+      queryClient.invalidateQueries({ queryKey: ['blueprints', projectId] });
+      if (viewingBlueprint?.id === blueprintId) {
+        setViewingBlueprint(null);
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || 'Failed to delete blueprint';
+      setDeleteError(msg);
     }
   }
 
@@ -73,6 +81,13 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
   return (
     <div className="space-y-4">
       <BlueprintUploader projectId={projectId} />
+
+      {deleteError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <p className="text-sm text-red-700">{deleteError}</p>
+          <button onClick={() => setDeleteError(null)} className="text-red-400 hover:text-red-600 text-sm ml-3">Dismiss</button>
+        </div>
+      )}
 
       {blueprints.length === 0 ? (
         <EmptyState

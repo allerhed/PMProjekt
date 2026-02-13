@@ -98,3 +98,11 @@ export async function deleteBlueprint(id: string): Promise<BlueprintRow | null> 
   );
   return result.rows[0] || null;
 }
+
+export async function countTasksWithAnnotations(blueprintId: string): Promise<number> {
+  const result = await pool.query(
+    'SELECT COUNT(*) FROM tasks WHERE blueprint_id = $1 AND annotation_x IS NOT NULL',
+    [blueprintId],
+  );
+  return parseInt(result.rows[0].count, 10);
+}

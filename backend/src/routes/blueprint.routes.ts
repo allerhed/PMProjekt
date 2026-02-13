@@ -209,6 +209,13 @@ router.delete(
         return;
       }
 
+      // Prevent deletion if tasks have annotations on this blueprint
+      const annotatedCount = await blueprintModel.countTasksWithAnnotations(blueprint.id);
+      if (annotatedCount > 0) {
+        sendError(res, 409, 'HAS_ANNOTATIONS', `Cannot delete blueprint with ${annotatedCount} annotated task(s). Remove the annotations first.`);
+        return;
+      }
+
       // Delete from S3
       try {
         await storageService.deleteObject(blueprint.file_url);
