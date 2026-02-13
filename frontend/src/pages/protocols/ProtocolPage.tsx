@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useProject } from '../../hooks/useProjects';
 import { useTasks } from '../../hooks/useTasks';
+import { useGenerateProtocol, useProtocols } from '../../hooks/useProtocols';
+import { useProtocolSignatures } from '../../hooks/useProtocolSigning';
 import { uploadApi } from '../../services/upload.api';
 import type { Annotation } from '../../components/blueprints/PdfAnnotationViewer';
 import BlueprintReportView from '../../components/reports/BlueprintReportView';
+import SendForSigningModal from '../../components/protocols/SendForSigningModal';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
@@ -27,9 +31,21 @@ interface ProtocolPageProps {
 }
 
 export default function ProtocolPage({ projectId }: ProtocolPageProps) {
+  const [showSigningModal, setShowSigningModal] = useState(false);
   const { data: project, isLoading: projectLoading } = useProject(projectId);
   const { data: taskData, isLoading: tasksLoading } = useTasks(projectId, { limit: 10000 });
   const tasks: any[] = taskData?.data?.tasks || [];
+
+  // Protocol generation
+  const generateProtocol = useGenerateProtocol(projectId);
+  const { data: protocols = [] } = useProtocols(projectId);
+  const latestProtocol = protocols.find((p: any) => p.status === 'completed');
+
+  // Signatures for the latest completed protocol
+  const { data: signatures = [] } = useProtocolSignatures(
+    projectId,
+    latestProtocol?.id || '',
+  );
 
   const { data: blueprints = [], isLoading: blueprintsLoading } = useQuery({
     queryKey: ['blueprints', projectId],
@@ -276,10 +292,93 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
         })}
       </div>
 
-      {/* Export as PDF button (hidden when printing) */}
-      <div className="no-print flex justify-center mt-8 mb-4">
-        <Button onClick={() => window.print()}>Export as PDF</Button>
+      {/* Create PDF for Signing (hidden when printing) */}
+      <div className="no-print mt-8 mb-4 space-y-4">
+        <div className="flex justify-center gap-3">
+          <Button
+            loading={generateProtocol.isPending}
+            onClick={() => {
+              generateProtocol.mutate({
+                name: `Protocol - ${project?.name || 'Project'} - ${new Date().toLocaleDateString()}`,
+              });
+            }}
+          >
+            Create PDF for Signing
+          </Button>
+        </div>
+
+        {generateProtocol.isPending && (
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+            <Spinner />
+            <span>Generating PDF...</span>
+          </div>
+        )}
+
+        {latestProtocol && (
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Generated Protocol PDF</h3>
+            <div className="flex items-center gap-3 mb-4">
+              <a
+                href={latestProtocol.download_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary-600 hover:text-primary-700 underline"
+              >
+                Download PDF
+              </a>
+              <span className="text-xs text-gray-400">
+                {new Date(latestProtocol.generated_at || latestProtocol.created_at).toLocaleDateString()}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => setShowSigningModal(true)}
+              >
+                Send for Signing
+              </Button>
+            </div>
+
+            {/* Signatures list */}
+            {(signatures as any[]).length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Signatures</h4>
+                <div className="space-y-2">
+                  {(signatures as any[]).map((sig: any) => (
+                    <div
+                      key={sig.id}
+                      className="flex items-center gap-3 text-sm"
+                    >
+                      {sig.signed_at ? (
+                        <Badge variant="green">Signed</Badge>
+                      ) : (
+                        <Badge variant="yellow">Pending</Badge>
+                      )}
+                      <span className="text-gray-700">
+                        {sig.signer_name || sig.signer_email || 'Awaiting signature'}
+                      </span>
+                      {sig.signed_at && (
+                        <span className="text-xs text-gray-400">
+                          {new Date(sig.signed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Signing Modal */}
+      {latestProtocol && (
+        <SendForSigningModal
+          isOpen={showSigningModal}
+          onClose={() => setShowSigningModal(false)}
+          projectId={projectId}
+          protocolId={latestProtocol.id}
+          protocolName={latestProtocol.name}
+        />
+      )}
     </div>
   );
 }

@@ -43,8 +43,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center h-16 px-6 border-b border-gray-200">
-            <span className="text-lg font-bold text-primary-800">CM</span>
-            <span className="ml-2 text-sm text-gray-600">Construction Manager</span>
+            <span className="text-lg font-bold text-primary-800">TaskProof</span>
           </div>
 
           {/* Navigation */}

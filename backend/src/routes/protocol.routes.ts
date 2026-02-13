@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
@@ -6,11 +7,16 @@ import { protocolLimiter } from '../middleware/rateLimiter';
 import { sendSuccess, sendError } from '../utils/response';
 import { UserRole } from '../types';
 import { generateProtocolSchema } from '../validators/protocol.validators';
+import { createSigningLinkSchema } from '../validators/protocolSignature.validators';
 import * as protocolModel from '../models/protocol.model';
+import * as protocolSignatureModel from '../models/protocolSignature.model';
 import * as projectModel from '../models/project.model';
 import * as storageService from '../services/storage.service';
 import { startProtocolGeneration } from '../services/protocol.service';
+import { sendEmail } from '../services/email.service';
+import { renderProtocolSigning } from '../services/emailTemplate.service';
 import { param } from '../utils/params';
+import config from '../config';
 
 const router = Router({ mergeParams: true });
 
@@ -109,5 +115,73 @@ router.get('/:protocolId', async (req: Request, res: Response, next: NextFunctio
     next(err);
   }
 });
+
+// POST /api/v1/projects/:projectId/protocols/:protocolId/signing-links — create signing link
+router.post(
+  '/:protocolId/signing-links',
+  validate(createSigningLinkSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const protocolId = param(req.params.protocolId);
+
+      const protocol = await protocolModel.findProtocolById(protocolId, req.user!.organizationId);
+      if (!protocol || protocol.project_id !== param(req.params.projectId)) {
+        sendError(res, 404, 'NOT_FOUND', 'Protocol not found');
+        return;
+      }
+
+      if (protocol.status !== 'completed') {
+        sendError(res, 400, 'NOT_READY', 'Protocol PDF has not been generated yet');
+        return;
+      }
+
+      // Generate token
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+      await protocolSignatureModel.createSigningToken(protocolId, token, tokenHash, 7);
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const signingUrl = `${frontendUrl}/sign/${token}`;
+
+      // Send email if provided
+      if (req.body.email) {
+        const emailContent = renderProtocolSigning({
+          protocolName: protocol.name,
+          signingUrl,
+        });
+        sendEmail({
+          to: req.body.email,
+          ...emailContent,
+        });
+      }
+
+      sendSuccess(res, { signingUrl, token }, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /api/v1/projects/:projectId/protocols/:protocolId/signatures — list signatures
+router.get(
+  '/:protocolId/signatures',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const protocolId = param(req.params.protocolId);
+
+      const protocol = await protocolModel.findProtocolById(protocolId, req.user!.organizationId);
+      if (!protocol || protocol.project_id !== param(req.params.projectId)) {
+        sendError(res, 404, 'NOT_FOUND', 'Protocol not found');
+        return;
+      }
+
+      const signatures = await protocolSignatureModel.findSignaturesByProtocol(protocolId);
+      sendSuccess(res, { signatures });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 export default router;

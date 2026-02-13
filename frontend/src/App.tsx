@@ -21,6 +21,7 @@ import ProductListPage from './pages/products/ProductListPage';
 import FormBuilderPage from './pages/admin/FormBuilderPage';
 import TaskReportPage from './pages/admin/TaskReportPage';
 import MyTasksPage from './pages/tasks/MyTasksPage';
+import PublicSigningPage from './pages/protocols/PublicSigningPage';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
 
@@ -58,6 +59,7 @@ function AppRoutes() {
       />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/sign/:token" element={<PublicSigningPage />} />
 
       {/* Protected app routes */}
       <Route

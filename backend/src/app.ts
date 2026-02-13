@@ -26,6 +26,7 @@ import productRoutes from './routes/product.routes';
 import taskProductRoutes from './routes/taskProduct.routes';
 import { adminRouter as adminCustomFieldRoutes, publicRouter as publicCustomFieldRoutes } from './routes/customField.routes';
 import reportRoutes from './routes/report.routes';
+import publicSigningRoutes from './routes/publicSigning.routes';
 import config from './config';
 
 const app = express();
@@ -62,6 +63,7 @@ app.use(healthRoutes);
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/public/sign', publicSigningRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/projects/:projectId/tasks', taskRoutes);
 app.use('/api/v1/projects/:projectId/tasks/:taskId/comments', taskCommentRoutes);

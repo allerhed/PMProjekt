@@ -25,7 +25,8 @@ export function validate(schema: ZodSchema) {
 export function validateQuery(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      req.query = schema.parse(req.query) as any;
+      // Express 5: req.query is a read-only getter, so validate without reassigning
+      schema.parse(req.query);
       next();
     } catch (err) {
       if (err instanceof ZodError) {

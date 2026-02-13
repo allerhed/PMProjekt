@@ -36,7 +36,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
             {user?.firstName?.[0]}{user?.lastName?.[0]}
           </div>
         </Link>
-        <Button variant="ghost" size="sm" onClick={logout}>
+        <Button variant="secondary" size="sm" onClick={logout}>
           Logout
         </Button>
       </div>
