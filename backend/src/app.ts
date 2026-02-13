@@ -7,6 +7,9 @@ import { inputSanitizer } from './middleware/inputSanitizer';
 import { requestIdMiddleware } from './middleware/requestId';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFound';
+import { authenticate } from './middleware/authenticate';
+import { sendSuccess } from './utils/response';
+import * as taskModel from './models/task.model';
 import healthRoutes from './routes/health';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/project.routes';
@@ -22,6 +25,7 @@ import storageRoutes from './routes/storage.routes';
 import productRoutes from './routes/product.routes';
 import taskProductRoutes from './routes/taskProduct.routes';
 import { adminRouter as adminCustomFieldRoutes, publicRouter as publicCustomFieldRoutes } from './routes/customField.routes';
+import reportRoutes from './routes/report.routes';
 import config from './config';
 
 const app = express();
@@ -64,6 +68,17 @@ app.use('/api/v1/projects/:projectId/tasks/:taskId/comments', taskCommentRoutes)
 app.use('/api/v1/projects/:projectId/tasks/:taskId/photos', taskPhotoRoutes);
 app.use('/api/v1/projects/:projectId/blueprints', blueprintRoutes);
 app.use('/api/v1/projects/:projectId/protocols', protocolRoutes);
+
+// Standalone route — Express 5 doesn't match multi-segment paths on mounted routers
+app.get('/api/v1/users/me/tasks', authenticate, async (req, res, next) => {
+  try {
+    const tasks = await taskModel.findTasksByUser(req.user!.userId, req.user!.organizationId);
+    sendSuccess(res, { tasks });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
 app.use('/api/v1/admin', adminRoutes);
@@ -71,6 +86,7 @@ app.use('/api/v1/storage', storageRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/projects/:projectId/tasks/:taskId/products', taskProductRoutes);
 app.use('/api/v1/admin/custom-fields', adminCustomFieldRoutes);
+app.use('/api/v1/admin/reports', reportRoutes);
 app.use('/api/v1/custom-fields', publicCustomFieldRoutes);
 
 // Error handling

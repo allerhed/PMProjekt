@@ -248,27 +248,34 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
     email: '', firstName: '', lastName: '', role: 'field_user', password: '',
   });
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
+  const [error, setError] = useState('');
   const createUser = useCreateUser();
   const { data: cfDefinitions = [] } = useCustomFieldDefinitions('user');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError('');
     try {
+      const { password, ...rest } = form;
       await createUser.mutateAsync({
-        ...form,
+        ...rest,
+        ...(password ? { password } : {}),
         ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       });
       onClose();
       setForm({ email: '', firstName: '', lastName: '', role: 'field_user', password: '' });
       setCustomFields({});
-    } catch {
-      // Error handled by mutation
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || 'Failed to create user');
     }
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Invite User">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="First Name"
@@ -301,8 +308,7 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           type="password"
           value={form.password}
           onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-          required
-          helpText="The user should change this on first login."
+          helpText="Optional. Must have 8+ chars, uppercase, lowercase, number, and special character. Auto-generated if left empty."
         />
         <CustomFieldsRenderer
           definitions={cfDefinitions}

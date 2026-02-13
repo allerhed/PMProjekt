@@ -20,7 +20,10 @@ const createUserSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   role: z.enum(['org_admin', 'project_manager', 'field_user']),
-  password: z.string().min(8).optional(),
+  password: z.preprocess(
+    (val) => (val === '' ? undefined : val),
+    z.string().min(8).optional(),
+  ),
   customFields: z.record(z.string(), z.unknown()).optional(),
 });
 

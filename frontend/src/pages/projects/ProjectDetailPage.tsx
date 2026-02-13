@@ -305,7 +305,15 @@ function TaskRow({ task, onClick }: { task: any; onClick: () => void }) {
 }
 
 function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onClose: () => void; projectId: string }) {
-  const [form, setForm] = useState({ title: '', description: '', priority: 'normal', trade: '', assignedToContractorEmail: '' });
+  const currentUser = useAuthStore((s) => s.user);
+  const { data: usersData } = useUsers({ limit: 200 });
+  const users = usersData?.data?.users || [];
+  const userOptions = users.map((u: any) => ({
+    value: u.id,
+    label: `${u.first_name} ${u.last_name}`,
+  }));
+
+  const [form, setForm] = useState({ title: '', description: '', priority: 'normal', trade: '', assignedToUser: currentUser?.userId || '' });
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const createTask = useCreateTask(projectId);
   const { data: cfDefinitions = [] } = useCustomFieldDefinitions('task');
@@ -318,11 +326,11 @@ function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onCl
         description: form.description || undefined,
         priority: form.priority,
         trade: form.trade || undefined,
-        assignedToContractorEmail: form.assignedToContractorEmail || undefined,
+        assignedToUser: form.assignedToUser || undefined,
         ...(Object.keys(customFields).length > 0 ? { customFields } : {}),
       });
       onClose();
-      setForm({ title: '', description: '', priority: 'normal', trade: '', assignedToContractorEmail: '' });
+      setForm({ title: '', description: '', priority: 'normal', trade: '', assignedToUser: currentUser?.userId || '' });
       setCustomFields({});
     } catch {
       // Error handled by mutation
@@ -359,12 +367,12 @@ function CreateTaskModal({ isOpen, onClose, projectId }: { isOpen: boolean; onCl
             placeholder="e.g., Electrical"
           />
         </div>
-        <Input
-          label="Contractor Email"
-          type="email"
-          value={form.assignedToContractorEmail}
-          onChange={(e) => setForm((p) => ({ ...p, assignedToContractorEmail: e.target.value }))}
-          placeholder="contractor@example.com"
+        <Select
+          label="Contractor"
+          options={userOptions}
+          placeholder="Select user"
+          value={form.assignedToUser}
+          onChange={(e) => setForm((p) => ({ ...p, assignedToUser: e.target.value }))}
         />
         <CustomFieldsRenderer
           definitions={cfDefinitions}

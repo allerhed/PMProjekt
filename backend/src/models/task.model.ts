@@ -279,6 +279,34 @@ export async function deleteTask(id: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function findTasksByUser(
+  userId: string,
+  organizationId: string,
+): Promise<TaskWithCounts[]> {
+  const result = await pool.query(
+    `SELECT t.*,
+       p.name as project_name,
+       COALESCE(ph.cnt, 0)::int as photo_count,
+       COALESCE(cm.cnt, 0)::int as comment_count,
+       COALESCE(tp.cnt, 0)::int as product_count,
+       cu.first_name as creator_first_name,
+       cu.last_name as creator_last_name,
+       au.first_name as assignee_first_name,
+       au.last_name as assignee_last_name
+     FROM tasks t
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_photos WHERE task_id = t.id) ph ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_comments WHERE task_id = t.id) cm ON true
+     LEFT JOIN LATERAL (SELECT COUNT(*) as cnt FROM task_products WHERE task_id = t.id) tp ON true
+     LEFT JOIN users cu ON cu.id = t.created_by
+     LEFT JOIN users au ON au.id = t.assigned_to_user
+     WHERE t.assigned_to_user = $1 AND p.organization_id = $2
+     ORDER BY p.name, t.task_number`,
+    [userId, organizationId],
+  );
+  return result.rows;
+}
+
 export async function findTasksByBlueprint(
   blueprintId: string,
   organizationId: string,

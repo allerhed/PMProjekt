@@ -5,6 +5,7 @@ import { useTask, useUpdateTask } from '../../hooks/useTasks';
 import { useComments, useCreateComment } from '../../hooks/useComments';
 import { useProducts, useTaskProducts, useAddProductToTask, useRemoveProductFromTask } from '../../hooks/useProducts';
 import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
+import { useUsers } from '../../hooks/useUsers';
 import { uploadApi } from '../../services/upload.api';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -52,6 +53,9 @@ export default function TaskDetailPage() {
   const addProductToTask = useAddProductToTask(projectId!);
   const removeProductFromTask = useRemoveProductFromTask(projectId!);
   const { data: allProductsData } = useProducts({ search: productSearch || undefined, limit: 50 });
+  const { data: usersData } = useUsers({ limit: 200 });
+  const users = usersData?.data?.users || [];
+  const userOptions = users.map((u: any) => ({ value: u.id, label: `${u.first_name} ${u.last_name}` }));
 
   // Fetch blueprints for the project
   const { data: blueprints = [] } = useQuery({
@@ -184,12 +188,6 @@ export default function TaskDetailPage() {
                   <span className="text-gray-900">{task.trade}</span>
                 </div>
               )}
-              {task.assigned_to_contractor_email && (
-                <div>
-                  <span className="text-gray-500">Contractor:</span>{' '}
-                  <span className="text-gray-900">{task.assigned_to_contractor_email}</span>
-                </div>
-              )}
               {task.creator_first_name && (
                 <div>
                   <span className="text-gray-500">Created by:</span>{' '}
@@ -206,6 +204,22 @@ export default function TaskDetailPage() {
                   <span className="text-gray-900">{format(new Date(task.completed_at), 'MMM d, yyyy')}</span>
                 </div>
               )}
+            </div>
+
+            {/* Contractor */}
+            <div className="pt-2 border-t border-gray-200">
+              <Select
+                label="Contractor"
+                options={userOptions}
+                placeholder="Not assigned"
+                value={task.assigned_to_user || ''}
+                onChange={async (e) => {
+                  await updateTask.mutateAsync({
+                    taskId: taskId!,
+                    data: { assignedToUser: e.target.value || null },
+                  });
+                }}
+              />
             </div>
 
             {/* Status transition buttons */}

@@ -11,7 +11,8 @@ export const userApi = {
     firstName: string;
     lastName: string;
     role: string;
-    password: string;
+    password?: string;
+    customFields?: Record<string, unknown>;
   }) {
     const res = await api.post('/users', data);
     return res.data.data.user;

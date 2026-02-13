@@ -19,6 +19,8 @@ import OrgSettingsPage from './pages/admin/OrgSettingsPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import ProductListPage from './pages/products/ProductListPage';
 import FormBuilderPage from './pages/admin/FormBuilderPage';
+import TaskReportPage from './pages/admin/TaskReportPage';
+import MyTasksPage from './pages/tasks/MyTasksPage';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
 
@@ -66,6 +68,7 @@ function AppRoutes() {
         }
       >
         <Route path="/projects" element={<ProjectListPage />} />
+        <Route path="/my-tasks" element={<MyTasksPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
         <Route path="/products" element={<ProductListPage />} />
@@ -74,6 +77,7 @@ function AppRoutes() {
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/settings" element={<OrgSettingsPage />} />
         <Route path="/admin/form-builder" element={<FormBuilderPage />} />
+        <Route path="/admin/task-report" element={<TaskReportPage />} />
       </Route>
 
       {/* Default redirect */}
