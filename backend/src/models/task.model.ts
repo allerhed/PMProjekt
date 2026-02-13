@@ -45,6 +45,8 @@ export interface TaskFilters {
   assignedToUser?: string;
   assignedToContractorEmail?: string;
   search?: string;
+  sortBy?: 'number' | 'date' | 'user';
+  sortOrder?: 'asc' | 'desc';
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -56,6 +58,20 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 export function isValidStatusTransition(from: string, to: string): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+function buildOrderClause(sortBy?: string, sortOrder?: string): string {
+  const dir = sortOrder === 'desc' ? 'DESC' : 'ASC';
+  switch (sortBy) {
+    case 'number':
+      return `t.task_number ${dir}`;
+    case 'date':
+      return `t.created_at ${dir}`;
+    case 'user':
+      return `au.first_name ${dir} NULLS LAST, au.last_name ${dir} NULLS LAST, t.created_at DESC`;
+    default:
+      return `t.task_number ASC`;
+  }
 }
 
 export async function findTasksByProject(
@@ -126,9 +142,7 @@ export async function findTasksByProject(
      LEFT JOIN users cu ON cu.id = t.created_by
      LEFT JOIN users au ON au.id = t.assigned_to_user
      WHERE ${where}
-     ORDER BY
-       CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 END,
-       t.created_at DESC
+     ORDER BY ${buildOrderClause(filters.sortBy, filters.sortOrder)}
      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
     values,
   );

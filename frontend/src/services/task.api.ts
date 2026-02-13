@@ -6,6 +6,8 @@ export interface TaskFilters {
   trade?: string;
   assignedToMe?: boolean;
   search?: string;
+  sortBy?: 'number' | 'date' | 'user';
+  sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
 }

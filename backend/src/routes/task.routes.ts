@@ -58,6 +58,15 @@ router.get('/', parsePagination, async (req: Request, res: Response, next: NextF
     if (req.query.assignedToMe === 'true') filters.assignedToUser = req.user!.userId;
     if (req.query.search) filters.search = req.query.search as string;
 
+    const sortBy = req.query.sortBy as string | undefined;
+    if (sortBy && ['number', 'date', 'user'].includes(sortBy)) {
+      filters.sortBy = sortBy as 'number' | 'date' | 'user';
+    }
+    const sortOrder = req.query.sortOrder as string | undefined;
+    if (sortOrder && ['asc', 'desc'].includes(sortOrder)) {
+      filters.sortOrder = sortOrder as 'asc' | 'desc';
+    }
+
     const { tasks, total } = await taskModel.findTasksByProject(
       param(req.params.projectId),
       req.user!.organizationId,

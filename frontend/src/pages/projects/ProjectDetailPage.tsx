@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject, useUpdateProject } from '../../hooks/useProjects';
 import { useTasks, useCreateTask } from '../../hooks/useTasks';
@@ -35,6 +35,12 @@ const PRIORITY_OPTIONS = [
   { value: 'critical', label: 'Critical' },
 ];
 
+const SORT_OPTIONS = [
+  { value: 'number', label: 'Number' },
+  { value: 'date', label: 'Date' },
+  { value: 'user', label: 'User' },
+];
+
 const PROJECT_STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' },
@@ -63,6 +69,8 @@ export default function ProjectDetailPage() {
   const canEdit = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ORG_ADMIN || user?.role === UserRole.PROJECT_MANAGER;
 
   const [filters, setFilters] = useState<{ status?: string; search?: string }>({});
+  const [sortBy, setSortBy] = useState<string>('number');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const { data: taskData, isLoading: tasksLoading } = useTasks(projectId!, filters);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showEditProject, setShowEditProject] = useState(false);
@@ -76,8 +84,29 @@ export default function ProjectDetailPage() {
     return <div className="text-center py-12 text-gray-500">Project not found</div>;
   }
 
-  const tasks = taskData?.data?.tasks || [];
-  const taskCount = taskData?.meta?.pagination?.total || tasks.length;
+  const rawTasks = taskData?.data?.tasks || [];
+  const taskCount = taskData?.meta?.pagination?.total || rawTasks.length;
+
+  const tasks = [...rawTasks].sort((a: any, b: any) => {
+    let cmp = 0;
+    switch (sortBy) {
+      case 'date': {
+        const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+        cmp = da - db;
+        break;
+      }
+      case 'user': {
+        const na = (a.assignee_first_name || '').toLowerCase();
+        const nb = (b.assignee_first_name || '').toLowerCase();
+        cmp = na.localeCompare(nb);
+        break;
+      }
+      default:
+        cmp = (a.task_number || 0) - (b.task_number || 0);
+    }
+    return sortOrder === 'desc' ? -cmp : cmp;
+  });
 
   return (
     <div>
@@ -168,6 +197,29 @@ export default function ProjectDetailPage() {
               placeholder="Status"
               className="max-w-[150px]"
             />
+            <Select
+              options={SORT_OPTIONS}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="max-w-[140px]"
+            />
+            <button
+              type="button"
+              onClick={() => setSortOrder((o) => o === 'asc' ? 'desc' : 'asc')}
+              className="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortOrder === 'asc' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M10 5a.75.75 0 01.75.75v6.638l1.96-2.158a.75.75 0 111.08 1.04l-3.25 3.5a.75.75 0 01-1.08 0l-3.25-3.5a.75.75 0 111.08-1.04l1.96 2.158V5.75A.75.75 0 0110 5z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M10 15a.75.75 0 01-.75-.75V7.612L7.29 9.77a.75.75 0 01-1.08-1.04l3.25-3.5a.75.75 0 011.08 0l3.25 3.5a.75.75 0 11-1.08 1.04l-1.96-2.158v6.638A.75.75 0 0110 15z" clipRule="evenodd" />
+                </svg>
+              )}
+              {sortOrder === 'asc' ? 'Asc' : 'Desc'}
+            </button>
             <div className="flex-1" />
             <Button onClick={() => setShowCreateTask(true)}>Add Task</Button>
           </div>
@@ -233,29 +285,20 @@ function StatCard({ label, value, color }: { label: string; value: number; color
 }
 
 function TaskRow({ task, onClick }: { task: any; onClick: () => void }) {
+  const date = task.created_at ? new Date(task.created_at).toLocaleDateString() : '';
   return (
     <div
       onClick={onClick}
       className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
     >
       <div className="flex items-center gap-3 min-w-0">
-        <Badge variant={statusBadge[task.status] || 'gray'}>{task.status.replace('_', ' ')}</Badge>
-        <div className="min-w-0">
-          <p className="font-medium text-gray-900 truncate">
-            <span className="text-gray-400 font-mono text-sm mr-1">#{task.task_number}</span>
-            {task.title}
-          </p>
-          {task.trade && <p className="text-xs text-gray-500">{task.trade}</p>}
-        </div>
+        <span className="text-gray-500 font-mono text-sm w-8 text-right flex-shrink-0">{task.task_number}</span>
+        <span className="text-gray-400 text-xs w-20 flex-shrink-0">{date}</span>
+        <p className="font-medium text-gray-900 truncate">{task.title}</p>
       </div>
-      <div className="flex items-center gap-3 ml-4">
+      <div className="flex items-center gap-3 ml-4 flex-shrink-0">
         <Badge variant={priorityBadge[task.priority] || 'gray'}>{task.priority}</Badge>
-        {task.photo_count > 0 && (
-          <span className="text-xs text-gray-400">{task.photo_count} photos</span>
-        )}
-        {task.comment_count > 0 && (
-          <span className="text-xs text-gray-400">{task.comment_count} comments</span>
-        )}
+        {task.trade && <span className="text-xs text-gray-500">{task.trade}</span>}
       </div>
     </div>
   );
