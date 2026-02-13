@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useFileUpload } from '../../hooks/useFileUpload';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
@@ -12,6 +13,8 @@ interface OrgData {
   name: string;
   subdomain: string;
   logo_url: string | null;
+  logo_download_url: string | null;
+  logo_thumbnail_download_url: string | null;
   primary_color: string | null;
   storage_limit_bytes: number;
   storage_used_bytes: number;
@@ -22,7 +25,6 @@ interface OrgData {
 interface OrgFormState {
   name: string;
   primaryColor: string;
-  logoUrl: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -47,7 +49,6 @@ export default function OrgSettingsPage() {
   const [form, setForm] = useState<OrgFormState>({
     name: '',
     primaryColor: '',
-    logoUrl: '',
   });
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -64,13 +65,12 @@ export default function OrgSettingsPage() {
       setForm({
         name: data.name,
         primaryColor: data.primary_color || '',
-        logoUrl: data.logo_url || '',
       });
     }
   }, [data]);
 
   const mutation = useMutation({
-    mutationFn: async (payload: { name?: string; primaryColor?: string; logoUrl?: string }) => {
+    mutationFn: async (payload: { name?: string; primaryColor?: string }) => {
       const res = await api.patch('/organizations/current', payload);
       return res.data;
     },
@@ -83,14 +83,39 @@ export default function OrgSettingsPage() {
     },
   });
 
+  const handleRequestUrl = useCallback(async (file: File) => {
+    const res = await api.post('/organizations/current/upload-url', {
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+    });
+    return { uploadUrl: res.data.data.uploadUrl, resourceId: res.data.data.organizationId };
+  }, []);
+
+  const handleConfirmLogo = useCallback(async () => {
+    await api.post('/organizations/current/confirm-logo');
+    queryClient.invalidateQueries({ queryKey: ['organization', 'current'] });
+  }, [queryClient]);
+
+  const { state: uploadState, progress, error: uploadError, upload } = useFileUpload({
+    onRequestUrl: handleRequestUrl,
+    onConfirm: handleConfirmLogo,
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFeedback(null);
     mutation.mutate({
       name: form.name || undefined,
       primaryColor: form.primaryColor || undefined,
-      logoUrl: form.logoUrl || undefined,
     });
+  }
+
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      upload(file);
+    }
   }
 
   if (isLoading) {
@@ -143,13 +168,48 @@ export default function OrgSettingsPage() {
                   <span className="text-sm text-gray-500">{form.primaryColor}</span>
                 </div>
               )}
-              <Input
-                label="Logo URL"
-                value={form.logoUrl}
-                onChange={(e) => setForm((prev) => ({ ...prev, logoUrl: e.target.value }))}
-                placeholder="https://example.com/logo.png"
-                helpText="URL to your organization logo"
-              />
+
+              {/* Logo Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Organization Logo</label>
+                <div className="flex items-center gap-4">
+                  {(data.logo_thumbnail_download_url || data.logo_download_url) && uploadState !== 'done' ? (
+                    <img
+                      src={data.logo_thumbnail_download_url || data.logo_download_url!}
+                      alt="Organization logo"
+                      className="w-16 h-16 rounded-lg object-cover border border-gray-200"
+                    />
+                  ) : uploadState === 'done' ? (
+                    <div className="w-16 h-16 rounded-lg bg-green-100 flex items-center justify-center">
+                      <span className="text-green-600 text-xs font-medium">Uploaded</span>
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                      <span className="text-gray-400 text-xl font-bold">{data.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={handleLogoSelect}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                      disabled={uploadState === 'uploading' || uploadState === 'confirming'}
+                    />
+                    {uploadState === 'uploading' && (
+                      <div className="mt-1">
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div className="bg-primary-600 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">Uploading... {progress}%</p>
+                      </div>
+                    )}
+                    {uploadState === 'confirming' && <p className="text-xs text-gray-500 mt-1">Processing...</p>}
+                    {uploadState === 'done' && <p className="text-xs text-green-600 mt-1">Logo uploaded successfully</p>}
+                    {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
+                  </div>
+                </div>
+              </div>
 
               {feedback && (
                 <div

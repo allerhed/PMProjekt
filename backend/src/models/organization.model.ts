@@ -5,6 +5,7 @@ export interface OrganizationRow {
   name: string;
   subdomain: string;
   logo_url: string | null;
+  logo_thumbnail_url: string | null;
   primary_color: string | null;
   storage_used_bytes: number;
   storage_limit_bytes: number;
@@ -36,7 +37,7 @@ export async function findOrganizationBySubdomain(subdomain: string): Promise<Or
 
 export async function updateOrganization(
   id: string,
-  updates: Partial<Pick<OrganizationRow, 'name' | 'logo_url' | 'primary_color'>>,
+  updates: Partial<Pick<OrganizationRow, 'name' | 'logo_url' | 'logo_thumbnail_url' | 'primary_color'>>,
 ): Promise<OrganizationRow | null> {
   const fields: string[] = [];
   const values: unknown[] = [];

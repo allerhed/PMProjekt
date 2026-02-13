@@ -18,6 +18,7 @@ CREATE TABLE organizations (
   name VARCHAR(255) NOT NULL,
   subdomain VARCHAR(50) NOT NULL UNIQUE,
   logo_url VARCHAR(500),
+  logo_thumbnail_url VARCHAR(500),
   primary_color VARCHAR(7),
   storage_used_bytes BIGINT DEFAULT 0,
   storage_limit_bytes BIGINT DEFAULT 10737418240,
