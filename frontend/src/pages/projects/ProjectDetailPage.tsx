@@ -17,6 +17,7 @@ import Select from '../../components/ui/Select';
 import Spinner from '../../components/ui/Spinner';
 import EmptyState from '../../components/ui/EmptyState';
 import BlueprintList from '../../components/blueprints/BlueprintList';
+import NoteList from '../../components/notes/NoteList';
 import ProtocolPage from '../protocols/ProtocolPage';
 import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
 
@@ -164,7 +165,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <div className="flex gap-4">
-          {['tasks', 'blueprints', 'protocols'].map((tab) => (
+          {['tasks', 'blueprints', 'protocols', 'notes'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -260,6 +261,10 @@ export default function ProjectDetailPage() {
 
       {activeTab === 'protocols' && (
         <ProtocolPage projectId={projectId!} />
+      )}
+
+      {activeTab === 'notes' && (
+        <NoteList projectId={projectId!} />
       )}
 
       {showEditProject && (

@@ -40,6 +40,7 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
   const generateProtocol = useGenerateProtocol(projectId);
   const { data: protocols = [] } = useProtocols(projectId);
   const latestProtocol = protocols.find((p: any) => p.status === 'completed');
+  const isGenerating = generateProtocol.isPending || protocols.some((p: any) => p.status === 'generating');
 
   // Signatures for the latest completed protocol
   const { data: signatures = [] } = useProtocolSignatures(
@@ -296,7 +297,7 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
       <div className="no-print mt-8 mb-4 space-y-4">
         <div className="flex justify-center gap-3">
           <Button
-            loading={generateProtocol.isPending}
+            loading={isGenerating}
             onClick={() => {
               generateProtocol.mutate({
                 name: `Protocol - ${project?.name || 'Project'} - ${new Date().toLocaleDateString()}`,
@@ -307,7 +308,7 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
           </Button>
         </div>
 
-        {generateProtocol.isPending && (
+        {isGenerating && (
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
             <Spinner />
             <span>Generating PDF...</span>

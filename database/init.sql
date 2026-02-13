@@ -273,6 +273,20 @@ CREATE TABLE custom_field_definitions (
 CREATE INDEX idx_cfd_org_entity_active ON custom_field_definitions(organization_id, entity_type, is_active);
 
 -- ============================================================================
+-- Project notes table
+-- ============================================================================
+CREATE TABLE project_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  content TEXT NOT NULL DEFAULT '',
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_project_notes_project ON project_notes(project_id);
+
+-- ============================================================================
 -- Trigger function to automatically update the updated_at column
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -305,4 +319,8 @@ CREATE TRIGGER update_products_updated_at
 
 CREATE TRIGGER update_custom_field_definitions_updated_at
   BEFORE UPDATE ON custom_field_definitions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_project_notes_updated_at
+  BEFORE UPDATE ON project_notes
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

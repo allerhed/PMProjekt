@@ -7,6 +7,11 @@ export function useProtocols(projectId: string) {
     queryKey: ['protocols', projectId],
     queryFn: () => protocolApi.listProtocols(projectId),
     enabled: !!projectId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasGenerating = data?.some((p) => p.status === 'generating');
+      return hasGenerating ? 2000 : false;
+    },
   });
 }
 

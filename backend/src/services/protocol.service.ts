@@ -3,8 +3,10 @@ import * as taskModel from '../models/task.model';
 import * as projectModel from '../models/project.model';
 import * as protocolModel from '../models/protocol.model';
 import * as organizationModel from '../models/organization.model';
-import { generateProtocolPdf } from './pdf.service';
-import { buildS3Key, writeFile } from './storage.service';
+import * as taskPhotoModel from '../models/taskPhoto.model';
+import * as blueprintModel from '../models/blueprint.model';
+import { generateProtocolPdf, TaskPhoto, BlueprintData, BlueprintAnnotation } from './pdf.service';
+import { buildS3Key, writeFile, readFile } from './storage.service';
 import { incrementStorageUsed } from './storageTracking.service';
 import { logAuditAction } from './audit.service';
 
@@ -63,15 +65,88 @@ export async function startProtocolGeneration(params: ProtocolGenerationParams):
       if (params.filters.priority) filterParts.push(`Priority: ${params.filters.priority}`);
       const filterSummary = filterParts.length > 0 ? filterParts.join(', ') : 'All tasks';
 
+      // Fetch task photos
+      const tasksWithPhotos = tasks.filter((t) => t.photo_count > 0);
+      const taskPhotos: TaskPhoto[] = [];
+
+      for (const task of tasksWithPhotos) {
+        try {
+          const photos = await taskPhotoModel.findPhotosByTask(task.id, params.organizationId);
+          for (const photo of photos) {
+            try {
+              const imageBuffer = await readFile(photo.file_url);
+              taskPhotos.push({
+                task_id: task.id,
+                caption: photo.caption,
+                imageBuffer,
+              });
+            } catch (err) {
+              logger.warn({ err, photoId: photo.id }, 'Failed to read photo for protocol PDF');
+            }
+          }
+        } catch (err) {
+          logger.warn({ err, taskId: task.id }, 'Failed to fetch photos for task');
+        }
+      }
+
+      // Fetch blueprints with annotations
+      const blueprintRows = await blueprintModel.findBlueprintsByProject(
+        params.projectId,
+        params.organizationId,
+      );
+      const blueprints: BlueprintData[] = [];
+
+      for (const bp of blueprintRows) {
+        try {
+          const pdfBuffer = await readFile(bp.file_url);
+
+          // Gather annotations from tasks that reference this blueprint
+          const annotations: BlueprintAnnotation[] = tasks
+            .filter(
+              (t) =>
+                t.blueprint_id === bp.id &&
+                t.annotation_x != null &&
+                t.annotation_y != null &&
+                t.annotation_width != null &&
+                t.annotation_height != null &&
+                t.annotation_page != null,
+            )
+            .map((t) => ({
+              taskNumber: t.task_number,
+              status: t.status,
+              x: t.annotation_x!,
+              y: t.annotation_y!,
+              width: t.annotation_width!,
+              height: t.annotation_height!,
+              page: t.annotation_page!,
+            }));
+
+          blueprints.push({
+            name: bp.name,
+            pdfBuffer,
+            annotations,
+          });
+        } catch (err) {
+          logger.warn({ err, blueprintId: bp.id }, 'Failed to read blueprint for protocol PDF');
+        }
+      }
+
       // Generate PDF
       const pdfBuffer = await generateProtocolPdf({
         organizationName: org.name,
         projectName: project.name,
         projectAddress: project.address || undefined,
+        projectStatus: project.status,
+        projectStartDate: project.start_date || undefined,
+        projectTargetCompletion: project.target_completion_date || undefined,
+        projectDescription: project.description || undefined,
+        responsibleUserName: project.responsible_user_name || undefined,
         generatedAt: new Date().toISOString(),
         generatedBy: params.userId,
         filterSummary,
         tasks,
+        taskPhotos: taskPhotos.length > 0 ? taskPhotos : undefined,
+        blueprints: blueprints.length > 0 ? blueprints : undefined,
       });
 
       // Upload to S3

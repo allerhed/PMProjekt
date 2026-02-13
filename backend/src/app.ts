@@ -27,6 +27,7 @@ import taskProductRoutes from './routes/taskProduct.routes';
 import { adminRouter as adminCustomFieldRoutes, publicRouter as publicCustomFieldRoutes } from './routes/customField.routes';
 import reportRoutes from './routes/report.routes';
 import publicSigningRoutes from './routes/publicSigning.routes';
+import projectNoteRoutes from './routes/projectNote.routes';
 import config from './config';
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/api/v1/projects/:projectId/tasks/:taskId/comments', taskCommentRoutes)
 app.use('/api/v1/projects/:projectId/tasks/:taskId/photos', taskPhotoRoutes);
 app.use('/api/v1/projects/:projectId/blueprints', blueprintRoutes);
 app.use('/api/v1/projects/:projectId/protocols', protocolRoutes);
+app.use('/api/v1/projects/:projectId/notes', projectNoteRoutes);
 
 // Standalone route — Express 5 doesn't match multi-segment paths on mounted routers
 app.get('/api/v1/users/me/tasks', authenticate, async (req, res, next) => {
