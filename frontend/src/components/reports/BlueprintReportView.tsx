@@ -74,7 +74,7 @@ export default function BlueprintReportView({
           const context = canvas.getContext('2d');
           if (!context) continue;
 
-          await page.render({ canvasContext: context, viewport }).promise;
+          await page.render({ canvasContext: context, canvas, viewport }).promise;
 
           rendered.push({
             pageNum,

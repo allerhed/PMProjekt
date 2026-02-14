@@ -2,9 +2,8 @@ import pool from '../config/database';
 import { hashPassword, comparePassword, validatePasswordPolicy } from '../utils/password';
 import { generateToken, JwtPayload } from '../utils/jwt';
 import { generateResetToken, hashToken } from '../utils/crypto';
-import { createOrganization, findOrganizationBySubdomain } from '../models/organization.model';
+import { findOrganizationBySubdomain } from '../models/organization.model';
 import {
-  createUser,
   findUserByEmail,
   updateLastLogin,
   incrementFailedLogins,
@@ -29,7 +28,7 @@ export interface AuthResult {
 }
 
 function sanitizeUser(user: UserRow): Omit<UserRow, 'password_hash'> {
-  const { password_hash, ...safe } = user;
+  const { password_hash: _password_hash, ...safe } = user;
   return safe;
 }
 

@@ -16,7 +16,6 @@ import { startProtocolGeneration } from '../services/protocol.service';
 import { sendEmail } from '../services/email.service';
 import { renderProtocolSigning } from '../services/emailTemplate.service';
 import { param } from '../utils/params';
-import config from '../config';
 
 const router = Router({ mergeParams: true });
 

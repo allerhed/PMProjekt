@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProjectNotes, useCreateNote, useUpdateNote, useDeleteNote } from '../../hooks/useProjectNotes';
-import { useAuthStore } from '../../stores/authStore';
 import type { ProjectNote } from '../../services/projectNote.api';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';

@@ -121,8 +121,7 @@ export default function ProductListPage() {
         <EmptyState
           title="No products found"
           description={search ? 'Try adjusting your search.' : 'Add your first product to the catalog.'}
-          actionLabel="Add Product"
-          onAction={openCreate}
+          action={<Button onClick={openCreate}>Add Product</Button>}
         />
       ) : (
         <>

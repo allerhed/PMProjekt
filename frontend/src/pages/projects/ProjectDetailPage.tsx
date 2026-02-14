@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject, useUpdateProject } from '../../hooks/useProjects';
 import { useTasks, useCreateTask } from '../../hooks/useTasks';
@@ -47,13 +47,6 @@ const PROJECT_STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
   { value: 'archived', label: 'Archived' },
 ];
-
-const statusBadge: Record<string, 'red' | 'yellow' | 'green' | 'blue'> = {
-  open: 'red',
-  in_progress: 'yellow',
-  completed: 'green',
-  verified: 'blue',
-};
 
 const priorityBadge: Record<string, 'gray' | 'yellow' | 'red' | 'purple'> = {
   low: 'gray',

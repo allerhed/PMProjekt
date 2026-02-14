@@ -33,7 +33,7 @@ import * as taskModel from '../../models/task.model';
 import * as commentModel from '../../models/comment.model';
 import { hashPassword } from '../../utils/password';
 
-const mockPool = pool as jest.Mocked<typeof pool>;
+const _mockPool = pool as jest.Mocked<typeof pool>;
 
 describe('SQL Injection Prevention', () => {
   const agent = request.agent(app);

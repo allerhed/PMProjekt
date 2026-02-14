@@ -2,8 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { validate } from '../middleware/validate';
 import { authenticate } from '../middleware/authenticate';
 import { authLimiter } from '../middleware/rateLimiter';
-import { setAuthCookie, clearAuthCookie, generateToken } from '../utils/jwt';
-import { sendSuccess, sendError } from '../utils/response';
+import { setAuthCookie, clearAuthCookie } from '../utils/jwt';
+import { sendSuccess } from '../utils/response';
 import {
   registerSchema,
   loginSchema,

@@ -328,7 +328,7 @@ export default function ProtocolPage({ projectId }: ProtocolPageProps) {
                 Download PDF
               </a>
               <span className="text-xs text-gray-400">
-                {new Date(latestProtocol.generated_at || latestProtocol.created_at).toLocaleDateString()}
+                {new Date(latestProtocol.created_at).toLocaleDateString()}
               </span>
               <Button
                 size="sm"

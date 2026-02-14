@@ -18,7 +18,7 @@ router.get('/ready', async (req: Request, res: Response) => {
         timestamp: result.rows[0].now,
       },
     });
-  } catch (err) {
+  } catch (_err) {
     sendError(res, 503, 'SERVICE_UNAVAILABLE', 'Database connection failed');
   }
 });

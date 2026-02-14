@@ -56,7 +56,7 @@ router.get(
       );
 
       // Remove password hashes from response
-      const sanitized = users.map(({ password_hash, ...u }) => u);
+      const sanitized = users.map(({ password_hash: _password_hash, ...u }) => u);
 
       sendSuccess(res, { users: sanitized }, 200, {
         page: req.pagination!.page,
@@ -125,7 +125,7 @@ router.post(
 
       // TODO: Send invitation email (Phase 5)
 
-      const { password_hash, ...sanitized } = user;
+      const { password_hash: _password_hash, ...sanitized } = user;
       sendSuccess(res, { user: sanitized }, 201);
     } catch (err) {
       next(err);
@@ -149,7 +149,7 @@ router.get('/:userId', async (req: Request, res: Response, next: NextFunction) =
       return;
     }
 
-    const { password_hash, ...sanitized } = user;
+    const { password_hash: _password_hash, ...sanitized } = user;
     sendSuccess(res, { user: sanitized });
   } catch (err) {
     next(err);
@@ -251,7 +251,7 @@ router.patch('/:userId', validate(updateUserSchema), async (req: Request, res: R
       return;
     }
 
-    const { password_hash, ...sanitized } = updated;
+    const { password_hash: _password_hash, ...sanitized } = updated;
     sendSuccess(res, { user: sanitized });
   } catch (err) {
     next(err);

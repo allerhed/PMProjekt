@@ -109,6 +109,7 @@ export default function PdfAnnotationViewer({
 
       const renderContext = {
         canvasContext: context,
+        canvas,
         viewport,
       };
 

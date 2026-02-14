@@ -18,7 +18,7 @@ export default function SendForSigningModal({
   onClose,
   projectId,
   protocolId,
-  protocolName,
+  protocolName: _protocolName,
 }: SendForSigningModalProps) {
   const [email, setEmail] = useState('');
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export default function SendForSigningModal({
   };
 
   const handleGenerateQr = async () => {
-    const result = await createLink.mutateAsync();
+    const result = await createLink.mutateAsync(undefined);
     setSigningUrl(result.signingUrl);
   };
 
