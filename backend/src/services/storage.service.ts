@@ -1,14 +1,12 @@
 import {
-  PutObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+  generateBlobSASQueryParameters,
+  BlobSASPermissions,
+  SASProtocol,
+} from '@azure/storage-blob';
 import fs from 'fs/promises';
 import path from 'path';
 import jwt from 'jsonwebtoken';
-import s3Client from '../config/s3';
+import { containerClient, sharedKeyCredential } from '../config/azure-storage';
 import config from '../config';
 import { logger } from '../utils/logger';
 
@@ -25,19 +23,6 @@ function localFilePath(key: string): string {
   return path.join(config.storage.localPath, key);
 }
 
-/**
- * Rewrite internal Docker endpoint (e.g. http://minio:9000) to the
- * browser-accessible public endpoint (e.g. http://localhost:9000)
- * so presigned URLs work from the client.
- */
-function rewriteUrlForClient(url: string): string {
-  const { publicEndpoint, endpoint } = config.aws.s3;
-  if (publicEndpoint && endpoint) {
-    return url.replace(endpoint, publicEndpoint);
-  }
-  return url;
-}
-
 export interface UploadTokenPayload {
   key: string;
   contentType: string;
@@ -52,11 +37,11 @@ export interface PresignedUploadResult {
 }
 
 /**
- * Build the S3 key for a resource.
+ * Build the storage key for a resource.
  * Pattern: {type}/{orgId}/{parentId}/{resourceId}/{filename}
  */
 export function buildS3Key(
-  type: 'blueprints' | 'photos' | 'protocols' | 'product-images' | 'project-images' | 'org-logos',
+  type: 'blueprints' | 'photos' | 'protocols' | 'product-images' | 'project-images' | 'org-logos' | 'backups',
   orgId: string,
   parentId: string,
   resourceId: string,
@@ -66,7 +51,7 @@ export function buildS3Key(
 }
 
 /**
- * Generate a presigned URL for uploading a file directly to S3,
+ * Generate a SAS URL for uploading a file directly to Azure Blob Storage,
  * or a signed token URL for local storage.
  */
 export async function generatePresignedUploadUrl(
@@ -86,22 +71,30 @@ export async function generatePresignedUploadUrl(
     return { uploadUrl, key, expiresAt };
   }
 
-  const command = new PutObjectCommand({
-    Bucket: config.aws.s3.bucket,
-    Key: key,
-    ContentType: contentType,
-    ContentLength: contentLength,
-  });
+  if (!sharedKeyCredential) {
+    throw new Error('Azure storage credentials not configured');
+  }
 
-  const uploadUrl = await getSignedUrl(s3Client, command, {
-    expiresIn: PRESIGNED_URL_EXPIRY,
-  });
+  const blockBlobClient = containerClient.getBlockBlobClient(key);
+  const sasToken = generateBlobSASQueryParameters(
+    {
+      containerName: containerClient.containerName,
+      blobName: key,
+      permissions: BlobSASPermissions.parse('cw'),
+      startsOn: new Date(Date.now() - 5 * 60 * 1000),
+      expiresOn: new Date(Date.now() + PRESIGNED_URL_EXPIRY * 1000),
+      contentType,
+      protocol: SASProtocol.Https,
+    },
+    sharedKeyCredential,
+  ).toString();
 
-  return { uploadUrl: rewriteUrlForClient(uploadUrl), key, expiresAt };
+  const uploadUrl = `${blockBlobClient.url}?${sasToken}`;
+  return { uploadUrl, key, expiresAt };
 }
 
 /**
- * Generate a presigned URL for downloading a file from S3,
+ * Generate a SAS URL for downloading a file from Azure Blob Storage,
  * or a direct file-serving URL for local storage.
  */
 export async function generatePresignedDownloadUrl(key: string): Promise<string> {
@@ -110,20 +103,28 @@ export async function generatePresignedDownloadUrl(key: string): Promise<string>
     return `${config.storage.publicUrl}/api/v1/storage/files/${encodedKey}`;
   }
 
-  const command = new GetObjectCommand({
-    Bucket: config.aws.s3.bucket,
-    Key: key,
-  });
+  if (!sharedKeyCredential) {
+    throw new Error('Azure storage credentials not configured');
+  }
 
-  const url = await getSignedUrl(s3Client, command, {
-    expiresIn: PRESIGNED_URL_EXPIRY,
-  });
+  const blobClient = containerClient.getBlobClient(key);
+  const sasToken = generateBlobSASQueryParameters(
+    {
+      containerName: containerClient.containerName,
+      blobName: key,
+      permissions: BlobSASPermissions.parse('r'),
+      startsOn: new Date(Date.now() - 5 * 60 * 1000),
+      expiresOn: new Date(Date.now() + PRESIGNED_URL_EXPIRY * 1000),
+      protocol: SASProtocol.Https,
+    },
+    sharedKeyCredential,
+  ).toString();
 
-  return rewriteUrlForClient(url);
+  return `${blobClient.url}?${sasToken}`;
 }
 
 /**
- * Check if a file exists in S3 or on local filesystem.
+ * Check if a file exists in Azure Blob Storage or on local filesystem.
  * Returns the content length if exists, null otherwise.
  */
 export async function checkFileExists(key: string): Promise<number | null> {
@@ -137,14 +138,11 @@ export async function checkFileExists(key: string): Promise<number | null> {
   }
 
   try {
-    const command = new HeadObjectCommand({
-      Bucket: config.aws.s3.bucket,
-      Key: key,
-    });
-    const response = await s3Client.send(command);
-    return response.ContentLength ?? null;
+    const blobClient = containerClient.getBlobClient(key);
+    const properties = await blobClient.getProperties();
+    return properties.contentLength ?? null;
   } catch (err: any) {
-    if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+    if (err.statusCode === 404) {
       return null;
     }
     throw err;
@@ -152,7 +150,7 @@ export async function checkFileExists(key: string): Promise<number | null> {
 }
 
 /**
- * Delete an object from S3 or local filesystem.
+ * Delete an object from Azure Blob Storage or local filesystem.
  */
 export async function deleteObject(key: string): Promise<void> {
   if (isLocalStorage()) {
@@ -168,47 +166,38 @@ export async function deleteObject(key: string): Promise<void> {
   }
 
   try {
-    const command = new DeleteObjectCommand({
-      Bucket: config.aws.s3.bucket,
-      Key: key,
-    });
-    await s3Client.send(command);
+    const blobClient = containerClient.getBlobClient(key);
+    await blobClient.deleteIfExists();
   } catch (err) {
-    logger.error({ err, key }, 'Failed to delete S3 object');
+    logger.error({ err, key }, 'Failed to delete blob');
     throw err;
   }
 }
 
 /**
- * Read a file from S3 or local filesystem.
- * Used by thumbnail service and other internal consumers.
+ * Read a file from Azure Blob Storage or local filesystem.
  */
 export async function readFile(key: string): Promise<Buffer> {
   if (isLocalStorage()) {
     return fs.readFile(localFilePath(key));
   }
 
-  const command = new GetObjectCommand({
-    Bucket: config.aws.s3.bucket,
-    Key: key,
-  });
-  const response = await s3Client.send(command);
+  const blobClient = containerClient.getBlobClient(key);
+  const downloadResponse = await blobClient.download(0);
 
-  if (!response.Body) {
-    throw new Error(`Empty body for S3 key: ${key}`);
+  if (!downloadResponse.readableStreamBody) {
+    throw new Error(`Empty body for blob key: ${key}`);
   }
 
-  const chunks: Uint8Array[] = [];
-  const stream = response.Body as AsyncIterable<Uint8Array>;
-  for await (const chunk of stream) {
-    chunks.push(chunk);
+  const chunks: Buffer[] = [];
+  for await (const chunk of downloadResponse.readableStreamBody) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
 }
 
 /**
- * Write a file to S3 or local filesystem.
- * Used by thumbnail service, protocol service, and the local upload route.
+ * Write a file to Azure Blob Storage or local filesystem.
  */
 export async function writeFile(key: string, data: Buffer, contentType: string): Promise<void> {
   if (isLocalStorage()) {
@@ -219,11 +208,8 @@ export async function writeFile(key: string, data: Buffer, contentType: string):
     return;
   }
 
-  const command = new PutObjectCommand({
-    Bucket: config.aws.s3.bucket,
-    Key: key,
-    Body: data,
-    ContentType: contentType,
+  const blockBlobClient = containerClient.getBlockBlobClient(key);
+  await blockBlobClient.upload(data, data.length, {
+    blobHTTPHeaders: { blobContentType: contentType },
   });
-  await s3Client.send(command);
 }

@@ -16,7 +16,7 @@ export function sendEmail(options: EmailOptions): void {
   setImmediate(async () => {
     try {
       await transporter.sendMail({
-        from: config.aws.ses.sender,
+        from: config.email.sender,
         to: options.to,
         subject: options.subject,
         html: options.html,

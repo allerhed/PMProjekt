@@ -41,3 +41,13 @@ export const protocolLimiter = rateLimit({
     sendError(res, 429, 'RATE_LIMITED', 'Too many protocol generation requests. Please try again later.');
   },
 });
+
+export const backupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req: Request, res: Response) => {
+    sendError(res, 429, 'RATE_LIMITED', 'Too many backup requests. Please try again later.');
+  },
+});

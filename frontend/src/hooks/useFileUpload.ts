@@ -40,6 +40,7 @@ export function useFileUpload({ onRequestUrl, onConfirm }: UseFileUploadOptions)
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', uploadUrl);
         xhr.setRequestHeader('Content-Type', file.type);
+        xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
 
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {

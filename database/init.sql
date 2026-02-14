@@ -287,6 +287,40 @@ CREATE TABLE project_notes (
 CREATE INDEX idx_project_notes_project ON project_notes(project_id);
 
 -- ============================================================================
+-- Backups table
+-- ============================================================================
+CREATE TABLE backups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed')),
+  file_key VARCHAR(500),
+  file_size_bytes BIGINT,
+  error_message TEXT,
+  triggered_by VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (triggered_by IN ('manual', 'scheduled')),
+  initiated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_backups_org_created ON backups(organization_id, created_at DESC);
+
+-- ============================================================================
+-- Backup settings table
+-- ============================================================================
+CREATE TABLE backup_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+  schedule_enabled BOOLEAN DEFAULT false,
+  schedule_cron VARCHAR(100) DEFAULT '0 3 * * *',
+  retention_days INTEGER DEFAULT 30,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================================================
 -- Trigger function to automatically update the updated_at column
 -- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -323,4 +357,12 @@ CREATE TRIGGER update_custom_field_definitions_updated_at
 
 CREATE TRIGGER update_project_notes_updated_at
   BEFORE UPDATE ON project_notes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_backups_updated_at
+  BEFORE UPDATE ON backups
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_backup_settings_updated_at
+  BEFORE UPDATE ON backup_settings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

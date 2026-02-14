@@ -1,9 +1,11 @@
 import app from './app';
 import config from './config';
 import { logger } from './utils/logger';
+import { initBackupScheduler } from './services/backup.service';
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port, env: config.env }, 'Server started');
+  initBackupScheduler();
 });
 
 // Graceful shutdown

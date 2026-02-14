@@ -5,13 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Only one deployment at a time
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
-  # First run CI checks
   ci:
     uses: ./.github/workflows/ci.yml
 
@@ -19,50 +17,65 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    # permissions for OIDC if using that for AWS auth
-    permissions:
-      id-token: write
-      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      # Configure AWS credentials (placeholder)
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Login to Azure Container Registry
+        uses: docker/login-action@v3
         with:
-          # TODO: Set these in repository secrets
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION || 'eu-north-1' }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push backend image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          # TODO: Create ECR repository and set name
-          ECR_REPOSITORY: construction-manager-backend
+          ACR_REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f backend/Dockerfile backend/
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          docker build \
+            -t $ACR_REGISTRY/construction-manager-backend:$IMAGE_TAG \
+            -t $ACR_REGISTRY/construction-manager-backend:latest \
+            -f backend/Dockerfile backend/
+          docker push $ACR_REGISTRY/construction-manager-backend --all-tags
 
       - name: Build and push frontend image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          # TODO: Create ECR repository and set name
-          ECR_REPOSITORY: construction-manager-frontend
+          ACR_REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f frontend/Dockerfile frontend/
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          docker build \
+            -t $ACR_REGISTRY/construction-manager-frontend:$IMAGE_TAG \
+            -t $ACR_REGISTRY/construction-manager-frontend:latest \
+            -f frontend/Dockerfile frontend/
+          docker push $ACR_REGISTRY/construction-manager-frontend --all-tags
 
-      - name: Deploy to ECS
-        # TODO: Configure ECS service and task definition
+      - name: Deploy to Azure VM
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
+          IMAGE_TAG: ${{ github.sha }}
+          VM_HOST: ${{ secrets.AZURE_VM_HOST }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
-          echo "TODO: Implement ECS deployment"
-          echo "Use aws ecs update-service or ecs-deploy action"
-          echo "Backend image: ${{ steps.login-ecr.outputs.registry }}/construction-manager-backend:${{ github.sha }}"
-          echo "Frontend image: ${{ steps.login-ecr.outputs.registry }}/construction-manager-frontend:${{ github.sha }}"
+          # Write SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new azureuser@${VM_HOST}"
+
+          # ACR login on the server
+          $SSH_CMD "docker login ${ACR_REGISTRY} -u ${ACR_USERNAME} -p ${ACR_PASSWORD}"
+
+          # Pull new images
+          $SSH_CMD "cd /opt/app && ACR_REGISTRY=${ACR_REGISTRY} IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.prod.yml pull"
+
+          # Restart with new images
+          $SSH_CMD "cd /opt/app && ACR_REGISTRY=${ACR_REGISTRY} IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.prod.yml up -d"
+
+          # Run migrations
+          $SSH_CMD "cd /opt/app && docker compose -f docker-compose.prod.yml exec -T backend npm run migrate:up"
+
+          # Clean up old images
+          $SSH_CMD "docker image prune -f"

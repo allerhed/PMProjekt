@@ -28,6 +28,7 @@ import { adminRouter as adminCustomFieldRoutes, publicRouter as publicCustomFiel
 import reportRoutes from './routes/report.routes';
 import publicSigningRoutes from './routes/publicSigning.routes';
 import projectNoteRoutes from './routes/projectNote.routes';
+import backupRoutes from './routes/backup.routes';
 import config from './config';
 
 const app = express();
@@ -85,12 +86,13 @@ app.get('/api/v1/users/me/tasks', authenticate, async (req, res, next) => {
 
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
-app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/storage', storageRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/projects/:projectId/tasks/:taskId/products', taskProductRoutes);
 app.use('/api/v1/admin/custom-fields', adminCustomFieldRoutes);
 app.use('/api/v1/admin/reports', reportRoutes);
+app.use('/api/v1/admin/backups', backupRoutes);
+app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/custom-fields', publicCustomFieldRoutes);
 
 // Error handling
