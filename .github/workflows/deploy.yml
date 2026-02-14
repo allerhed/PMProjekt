@@ -65,6 +65,9 @@ jobs:
 
           SSH_CMD="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new azureuser@${VM_HOST}"
 
+          # Copy updated compose file
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new docker-compose.prod.yml azureuser@${VM_HOST}:/opt/app/docker-compose.prod.yml
+
           # ACR login on the server
           $SSH_CMD "docker login ${ACR_REGISTRY} -u ${ACR_USERNAME} -p ${ACR_PASSWORD}"
 
@@ -74,8 +77,12 @@ jobs:
           # Restart with new images
           $SSH_CMD "cd /opt/app && ACR_REGISTRY=${ACR_REGISTRY} IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.prod.yml up -d"
 
-          # Run migrations
+          # Wait for backend to be ready, then run migrations
+          sleep 10
           $SSH_CMD "cd /opt/app && docker compose -f docker-compose.prod.yml exec -T backend npm run migrate:up"
+
+          # Restart backend to pick up any new tables
+          $SSH_CMD "cd /opt/app && docker compose -f docker-compose.prod.yml restart backend"
 
           # Clean up old images
           $SSH_CMD "docker image prune -f"
