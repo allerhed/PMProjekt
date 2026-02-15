@@ -86,6 +86,10 @@ npm run build        # Production build
 
 ## Known Pitfalls
 
+### All delete/remove actions require user confirmation
+
+Every destructive action (delete, remove, unlink) in the UI **must** show a confirmation dialog before executing. Use a `deleteTarget` / `removeTarget` state pattern: the button sets the target, a modal asks the user to confirm, and only the modal's confirm button triggers the actual API call. Never call a delete/remove API directly from a button click without an intermediate confirmation step.
+
 ### Bug Reporter library is designed to be portable
 
 The bug reporter lives in `frontend/src/lib/bug-reporter/` and is intentionally isolated — its core types have zero app imports. The library exports `BugReporterProvider`, `useBugReporter`, `BugReportButton`, and `BeetleIcon`. The app integrates it in `AppLayout.tsx` by wrapping the layout in `<BugReporterProvider>` and bridging `onSubmit` to the app's API layer. If extracting to a separate package, only the `lib/bug-reporter/` directory is needed.

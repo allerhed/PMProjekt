@@ -7,7 +7,7 @@ interface BugReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (report: BugReportPayload) => Promise<void>;
-  screenshotBase64: string;
+  screenshotBase64: string | null;
   consoleLogs: ConsoleLogEntry[];
   metadata: BrowserMetadata;
   user: BugReporterUser | null;
@@ -22,7 +22,7 @@ export default function BugReportModal({
   metadata,
   user,
 }: BugReportModalProps) {
-  const [mode, setMode] = useState<'annotate' | 'form'>('annotate');
+  const [mode, setMode] = useState<'annotate' | 'form'>(screenshotBase64 ? 'annotate' : 'form');
   const [annotatedScreenshot, setAnnotatedScreenshot] = useState(screenshotBase64);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -68,13 +68,20 @@ export default function BugReportModal({
   }
 
   const levelColors: Record<string, string> = {
-    error: 'text-red-400',
-    warn: 'text-yellow-400',
-    info: 'text-blue-400',
+    error: 'bg-red-950/40',
+    warn: 'bg-yellow-950/30',
+    info: 'text-gray-300',
     log: 'text-gray-300',
   };
 
-  const content = mode === 'annotate' ? (
+  const levelBadgeColors: Record<string, string> = {
+    error: 'text-red-400',
+    warn: 'text-yellow-400',
+    info: 'text-blue-400',
+    log: 'text-gray-500',
+  };
+
+  const content = mode === 'annotate' && screenshotBase64 ? (
     <AnnotationCanvas
       screenshotBase64={screenshotBase64}
       onSave={handleAnnotationSave}
@@ -99,22 +106,28 @@ export default function BugReportModal({
           )}
 
           {/* Screenshot preview */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Screenshot</label>
-            <div className="relative group">
-              <img
-                src={annotatedScreenshot}
-                alt="Bug screenshot"
-                className="w-full rounded-lg border border-gray-200 cursor-pointer"
-                onClick={() => setMode('annotate')}
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors rounded-lg">
-                <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium transition-opacity">
-                  Click to re-annotate
-                </span>
+          {annotatedScreenshot ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Screenshot</label>
+              <div className="relative group">
+                <img
+                  src={annotatedScreenshot}
+                  alt="Bug screenshot"
+                  className="w-full rounded-lg border border-gray-200 cursor-pointer"
+                  onClick={() => setMode('annotate')}
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors rounded-lg">
+                  <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium transition-opacity">
+                    Click to re-annotate
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-lg bg-yellow-50 p-3 text-sm text-yellow-700">
+              Screenshot capture failed. You can still submit the bug report without a screenshot.
+            </div>
+          )}
 
           {/* Title */}
           <div>
@@ -183,17 +196,26 @@ export default function BugReportModal({
               </svg>
             </button>
             {showLogs && (
-              <div className="max-h-48 overflow-y-auto bg-gray-900 rounded-b-lg p-3 font-mono text-xs">
+              <div className="max-h-64 overflow-y-auto bg-gray-900 rounded-b-lg font-mono text-xs">
                 {consoleLogs.length === 0 ? (
-                  <span className="text-gray-500">No console logs captured</span>
+                  <div className="p-3 text-gray-500">No console logs captured</div>
                 ) : (
                   consoleLogs.map((log, i) => (
-                    <div key={i} className={`${levelColors[log.level]} break-all`}>
-                      <span className="text-gray-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                      {' '}
-                      <span className="font-semibold">[{log.level.toUpperCase()}]</span>
-                      {' '}
-                      {log.message}
+                    <div
+                      key={i}
+                      className={`${levelColors[log.level]} px-3 py-1.5 ${i > 0 ? 'border-t border-gray-800' : ''}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-gray-500 shrink-0">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className={`font-semibold shrink-0 ${levelBadgeColors[log.level]}`}>
+                          [{log.level.toUpperCase()}]
+                        </span>
+                        <span className="break-all whitespace-pre-wrap min-w-0">
+                          {log.message}
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}

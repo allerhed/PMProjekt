@@ -59,15 +59,18 @@ export function BugReporterProvider({
     if (isCapturing || modalOpen) return;
     setIsCapturing(true);
     try {
-      const screenshot = await captureScreenshot({ scale: screenshotScale, excludeSelector });
+      let screenshot: string | null = null;
+      try {
+        screenshot = await captureScreenshot({ scale: screenshotScale, excludeSelector });
+      } catch (err) {
+        console.error('Bug reporter: Failed to capture screenshot', err);
+      }
       const logs = consoleCaptureRef.current?.getLogs() || [];
       const meta = collectMetadata();
       setScreenshotData(screenshot);
       setConsoleLogs(logs);
       setMetadata(meta);
       setModalOpen(true);
-    } catch (err) {
-      console.error('Bug reporter: Failed to capture screenshot', err);
     } finally {
       setIsCapturing(false);
     }
@@ -87,7 +90,7 @@ export function BugReporterProvider({
   return (
     <BugReporterContext.Provider value={{ openReportModal, isCapturing }}>
       {children}
-      {modalOpen && screenshotData && metadata && (
+      {modalOpen && metadata && (
         <BugReportModal
           isOpen={modalOpen}
           onClose={handleClose}

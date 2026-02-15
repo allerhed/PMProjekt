@@ -1,4 +1,4 @@
-import html2canvas from 'html2canvas';
+import domtoimage from 'dom-to-image-more';
 
 export interface ScreenshotOptions {
   scale?: number;
@@ -8,31 +8,32 @@ export interface ScreenshotOptions {
 export async function captureScreenshot(
   options: ScreenshotOptions = {},
 ): Promise<string> {
-  const { scale = 1, excludeSelector = '[data-bug-reporter-exclude]' } = options;
+  const {
+    scale = window.devicePixelRatio || 2,
+    excludeSelector = '[data-bug-reporter-exclude]',
+  } = options;
 
-  // Hide excluded elements
-  const hidden: HTMLElement[] = [];
-  if (excludeSelector) {
-    document.querySelectorAll<HTMLElement>(excludeSelector).forEach((el) => {
-      hidden.push(el);
-      el.style.visibility = 'hidden';
-    });
-  }
+  const width = document.body.scrollWidth;
+  const height = document.body.scrollHeight;
 
-  try {
-    const canvas = await html2canvas(document.body, {
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      scale,
-      backgroundColor: '#ffffff',
-    });
+  const dataUrl = await domtoimage.toPng(document.body, {
+    bgcolor: '#ffffff',
+    width,
+    height,
+    style: {
+      transform: `scale(${scale})`,
+      transformOrigin: 'top left',
+      width: `${width}px`,
+      height: `${height}px`,
+    },
+    quality: 1,
+    filter: (node: Node) => {
+      if (excludeSelector && node instanceof HTMLElement) {
+        return !node.matches(excludeSelector);
+      }
+      return true;
+    },
+  });
 
-    return canvas.toDataURL('image/png');
-  } finally {
-    // Restore hidden elements
-    for (const el of hidden) {
-      el.style.visibility = '';
-    }
-  }
+  return dataUrl;
 }
