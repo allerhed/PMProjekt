@@ -48,6 +48,8 @@ export default function TaskDetailPage() {
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [removeProductTarget, setRemoveProductTarget] = useState<{ taskId: string; productId: string; productName: string } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', description: '', priority: '', trade: '' });
 
   // Task products
   const { data: taskProducts = [], isLoading: taskProductsLoading } = useTaskProducts(projectId!, taskId!);
@@ -140,6 +142,29 @@ export default function TaskDetailPage() {
     });
   }
 
+  function openEdit() {
+    setEditForm({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority,
+      trade: task.trade || '',
+    });
+    setEditing(true);
+  }
+
+  async function handleEditSave() {
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: {
+        title: editForm.title,
+        description: editForm.description || null,
+        priority: editForm.priority,
+        trade: editForm.trade || null,
+      },
+    });
+    setEditing(false);
+  }
+
   return (
     <div className="max-w-3xl mx-auto">
       {/* Back nav */}
@@ -162,50 +187,108 @@ export default function TaskDetailPage() {
                 <p className="text-sm text-gray-500 mt-1">Project: {task.project_name}</p>
               )}
             </div>
-            <Badge variant={statusBadge[task.status]} size="md">
-              {task.status.replace('_', ' ')}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {!editing && (
+                <Button variant="secondary" size="sm" onClick={openEdit}>Edit</Button>
+              )}
+              <Badge variant={statusBadge[task.status]} size="md">
+                {task.status.replace('_', ' ')}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardBody>
           <div className="space-y-4">
-            {task.description && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-1">Description</h3>
-                <p className="text-gray-600">{task.description}</p>
-              </div>
-            )}
+            {editing ? (
+              <>
+                <Input
+                  label="Title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                  error={!editForm.title.trim() ? 'Title is required' : undefined}
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none resize-y"
+                    placeholder="Task description..."
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Select
+                    label="Priority"
+                    options={[
+                      { value: 'low', label: 'Low' },
+                      { value: 'normal', label: 'Normal' },
+                      { value: 'high', label: 'High' },
+                      { value: 'critical', label: 'Critical' },
+                    ]}
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm((f) => ({ ...f, priority: e.target.value }))}
+                  />
+                  <Input
+                    label="Trade"
+                    value={editForm.trade}
+                    onChange={(e) => setEditForm((f) => ({ ...f, trade: e.target.value }))}
+                    placeholder="e.g. Electrical, Plumbing..."
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                  <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    onClick={handleEditSave}
+                    loading={updateTask.isPending}
+                    disabled={!editForm.title.trim()}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                {task.description && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-1">Description</h3>
+                    <p className="text-gray-600">{task.description}</p>
+                  </div>
+                )}
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">Priority:</span>{' '}
-                <Badge variant={task.priority === 'critical' ? 'red' : task.priority === 'high' ? 'yellow' : 'gray'}>
-                  {task.priority}
-                </Badge>
-              </div>
-              {task.trade && (
-                <div>
-                  <span className="text-gray-500">Trade:</span>{' '}
-                  <span className="text-gray-900">{task.trade}</span>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Priority:</span>{' '}
+                    <Badge variant={task.priority === 'critical' ? 'red' : task.priority === 'high' ? 'yellow' : 'gray'}>
+                      {task.priority}
+                    </Badge>
+                  </div>
+                  {task.trade && (
+                    <div>
+                      <span className="text-gray-500">Trade:</span>{' '}
+                      <span className="text-gray-900">{task.trade}</span>
+                    </div>
+                  )}
+                  {task.creator_first_name && (
+                    <div>
+                      <span className="text-gray-500">Created by:</span>{' '}
+                      <span className="text-gray-900">{task.creator_first_name} {task.creator_last_name}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-500">Created:</span>{' '}
+                    <span className="text-gray-900">{format(new Date(task.created_at), 'MMM d, yyyy')}</span>
+                  </div>
+                  {task.completed_at && (
+                    <div>
+                      <span className="text-gray-500">Completed:</span>{' '}
+                      <span className="text-gray-900">{format(new Date(task.completed_at), 'MMM d, yyyy')}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {task.creator_first_name && (
-                <div>
-                  <span className="text-gray-500">Created by:</span>{' '}
-                  <span className="text-gray-900">{task.creator_first_name} {task.creator_last_name}</span>
-                </div>
-              )}
-              <div>
-                <span className="text-gray-500">Created:</span>{' '}
-                <span className="text-gray-900">{format(new Date(task.created_at), 'MMM d, yyyy')}</span>
-              </div>
-              {task.completed_at && (
-                <div>
-                  <span className="text-gray-500">Completed:</span>{' '}
-                  <span className="text-gray-900">{format(new Date(task.completed_at), 'MMM d, yyyy')}</span>
-                </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Contractor */}
             <div className="pt-2 border-t border-gray-200">
