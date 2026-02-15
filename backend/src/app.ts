@@ -29,6 +29,7 @@ import reportRoutes from './routes/report.routes';
 import publicSigningRoutes from './routes/publicSigning.routes';
 import projectNoteRoutes from './routes/projectNote.routes';
 import backupRoutes from './routes/backup.routes';
+import bugReportRoutes from './routes/bugReport.routes';
 import config from './config';
 
 const app = express();
@@ -94,6 +95,7 @@ app.use('/api/v1/admin/reports', reportRoutes);
 app.use('/api/v1/admin/backups', backupRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/custom-fields', publicCustomFieldRoutes);
+app.use('/api/v1/bug-reports', bugReportRoutes);
 
 // Error handling
 app.use(notFoundHandler);

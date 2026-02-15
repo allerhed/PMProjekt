@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Construction project management platform replacing paper-based workflows for task tracking, deficiency management, and protocol (report) generation. The full specification is in `construction-management-platform-spec.md`.
 
-**Current state:** Specification only — no implementation code exists yet. The spec defines the complete technical architecture, database schema, API endpoints, and deployment model.
+**Current state:** Implemented and deployed to production at https://taskproof.work.
 
 ## Planned Technology Stack
 
@@ -17,7 +17,7 @@ Construction project management platform replacing paper-based workflows for tas
 - **Email:** SMTP via Nodemailer
 - **Infrastructure:** Docker Compose (dev), Azure VM + ACR (prod)
 
-## Planned Project Structure
+## Project Structure
 
 ```
 frontend/          # React app served via Nginx container
@@ -35,7 +35,7 @@ backend/           # Express.js API server
 database/          # init.sql for schema setup
 ```
 
-## Development Commands (Once Implemented)
+## Development Commands
 
 ```bash
 # Start all services
@@ -73,7 +73,7 @@ npm run build        # Production build
 
 ## Database Schema
 
-9 tables: `users`, `organizations`, `projects`, `blueprints`, `tasks`, `task_photos`, `task_comments`, `protocols`, `audit_log`, `password_reset_tokens`. All primary keys are UUIDs. Full schema with indexes is in the spec document under "Database Schema".
+10 tables: `users`, `organizations`, `projects`, `blueprints`, `tasks`, `task_photos`, `task_comments`, `protocols`, `audit_log`, `password_reset_tokens`, `bug_reports`. All primary keys are UUIDs. Full schema with indexes is in the spec document under "Database Schema".
 
 ## Key Constraints from Spec
 
@@ -83,3 +83,32 @@ npm run build        # Production build
 - Protocol PDFs generated server-side and stored in Azure Blob Storage
 - Storage limit tracked per organization (default 10 GB)
 - Target: API p95 < 200ms, page load FCP < 2s, PDF generation < 15s
+
+## Known Pitfalls
+
+### Bug Reporter library is designed to be portable
+
+The bug reporter lives in `frontend/src/lib/bug-reporter/` and is intentionally isolated — its core types have zero app imports. The library exports `BugReporterProvider`, `useBugReporter`, `BugReportButton`, and `BeetleIcon`. The app integrates it in `AppLayout.tsx` by wrapping the layout in `<BugReporterProvider>` and bridging `onSubmit` to the app's API layer. If extracting to a separate package, only the `lib/bug-reporter/` directory is needed.
+
+### Database migrations must match model interfaces
+
+Every column referenced in a `backend/src/models/*.model.ts` interface **must** have a corresponding migration in `backend/migrations/`. The production database is managed exclusively by `node-pg-migrate` — there is no other mechanism to add columns.
+
+When adding a new column to a model interface or writing code that reads/writes a column, always verify a migration exists for it. Past incidents where this was missed:
+
+- `tasks.task_number` — referenced in task queries but missing from schema (migration `008`)
+- `tasks.annotation_x/y/width/height/page` — referenced in task creation but missing (migration `009`)
+- `organizations.logo_thumbnail_url` — referenced by confirm-logo endpoint but missing (migration `010`)
+
+**Checklist when adding new features:**
+1. Add the column to the TypeScript interface in `backend/src/models/`
+2. Create a numbered migration in `backend/migrations/` (e.g. `011_add-feature.js`)
+3. Include both `exports.up` and `exports.down`
+4. If backfilling existing rows, do it in the migration's `up` function
+
+### Nginx `.mjs` MIME type for pdfjs-dist worker
+
+The frontend uses `pdfjs-dist` for PDF/blueprint rendering. The library loads a web worker from a `.mjs` file (e.g. `pdf.worker-<hash>.mjs`). Nginx's default `mime.types` does not include `.mjs`, so it serves these files as `application/octet-stream`. Combined with the `X-Content-Type-Options: nosniff` security header, browsers refuse to execute the worker as a JavaScript module.
+
+The fix is in `frontend/Dockerfile` — a `sed` command patches `/etc/nginx/mime.types` to register `.mjs` as `application/javascript`. If the Dockerfile is rewritten or the base image changes, ensure this patch is preserved.
+

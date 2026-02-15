@@ -239,3 +239,46 @@ export interface CustomFieldDefinition {
   createdAt: string;
   updatedAt: string;
 }
+
+// Bug Report types
+export const BugReportStatus = {
+  OPEN: 'open',
+  IN_PROGRESS: 'in_progress',
+  RESOLVED: 'resolved',
+  CLOSED: 'closed',
+} as const;
+export type BugReportStatus = (typeof BugReportStatus)[keyof typeof BugReportStatus];
+
+export const BugReportPriority = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  CRITICAL: 'critical',
+} as const;
+export type BugReportPriority = (typeof BugReportPriority)[keyof typeof BugReportPriority];
+
+export interface BugReport {
+  id: string;
+  organizationId: string;
+  reportNumber: number;
+  title: string;
+  description: string | null;
+  stepsToReproduce: string | null;
+  status: BugReportStatus;
+  priority: BugReportPriority;
+  screenshotUrl: string | null;
+  screenshotDownloadUrl: string | null;
+  consoleLogs: Array<{ level: string; message: string; timestamp: string }> | null;
+  metadata: Record<string, unknown> | null;
+  reportedBy: string | null;
+  reporterFirstName: string | null;
+  reporterLastName: string | null;
+  reporterEmail: string | null;
+  assignedTo: string | null;
+  assigneeFirstName: string | null;
+  assigneeLastName: string | null;
+  resolutionNotes: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

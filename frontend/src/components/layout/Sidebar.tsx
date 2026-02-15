@@ -2,6 +2,8 @@ import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import { useAuthStore } from '../../stores/authStore';
 import { UserRole } from '../../types';
+import { useBugReporter, BeetleIcon } from '../../lib/bug-reporter';
+import { useBugReportOpenCount } from '../../hooks/useBugReports';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,12 +22,15 @@ const adminItems = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: ChartIcon },
   { to: '/admin/task-report', label: 'Task Report', icon: ReportIcon },
   { to: '/admin/backups', label: 'Backups', icon: DatabaseIcon },
+  { to: '/admin/bug-reports', label: 'Bug Reports', icon: BeetleIcon },
   { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ORG_ADMIN;
+  const { openReportModal, isCapturing } = useBugReporter();
+  const { data: openBugCount } = useBugReportOpenCount();
 
   return (
     <>
@@ -96,6 +101,30 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               </>
             )}
           </nav>
+
+          {/* Report Bug button — visible to all users */}
+          <div className="px-3 py-3 border-t border-gray-200" data-bug-reporter-exclude>
+            <button
+              onClick={openReportModal}
+              disabled={isCapturing}
+              className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              {isCapturing ? (
+                <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <BeetleIcon className="w-5 h-5" />
+              )}
+              Report Bug
+              {isAdmin && openBugCount !== undefined && openBugCount > 0 && (
+                <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  {openBugCount > 99 ? '99+' : openBugCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </aside>
     </>

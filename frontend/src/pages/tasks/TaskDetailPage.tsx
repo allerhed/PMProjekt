@@ -47,6 +47,7 @@ export default function TaskDetailPage() {
   const [selectedBlueprintId, setSelectedBlueprintId] = useState<string>('');
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [removeProductTarget, setRemoveProductTarget] = useState<{ taskId: string; productId: string; productName: string } | null>(null);
 
   // Task products
   const { data: taskProducts = [], isLoading: taskProductsLoading } = useTaskProducts(projectId!, taskId!);
@@ -404,7 +405,7 @@ export default function TaskDetailPage() {
                     </a>
                   )}
                   <button
-                    onClick={() => removeProductFromTask.mutateAsync({ taskId: taskId!, productId: tp.product_id })}
+                    onClick={() => setRemoveProductTarget({ taskId: taskId!, productId: tp.product_id, productName: tp.product_name })}
                     className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0"
                     title="Remove product"
                   >
@@ -474,6 +475,27 @@ export default function TaskDetailPage() {
               </button>
             ));
           })()}
+        </div>
+      </Modal>
+
+      {/* Remove Product Confirmation Modal */}
+      <Modal isOpen={!!removeProductTarget} onClose={() => setRemoveProductTarget(null)} title="Remove Product" size="sm">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to remove <strong>{removeProductTarget?.productName}</strong> from this task?
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setRemoveProductTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={removeProductFromTask.isPending}
+            onClick={async () => {
+              if (!removeProductTarget) return;
+              await removeProductFromTask.mutateAsync({ taskId: removeProductTarget.taskId, productId: removeProductTarget.productId });
+              setRemoveProductTarget(null);
+            }}
+          >
+            Remove
+          </Button>
         </div>
       </Modal>
 

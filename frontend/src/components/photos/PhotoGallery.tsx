@@ -17,9 +17,11 @@ export default function PhotoGallery({ projectId, taskId }: PhotoGalleryProps) {
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   async function handleDelete(photoId: string) {
     setDeleting(photoId);
+    setDeleteTarget(null);
     try {
       await uploadApi.deletePhoto(projectId, taskId, photoId);
       queryClient.invalidateQueries({ queryKey: ['photos', projectId, taskId] });
@@ -48,7 +50,7 @@ export default function PhotoGallery({ projectId, taskId }: PhotoGalleryProps) {
               onClick={() => setLightboxIndex(index)}
             />
             <button
-              onClick={() => handleDelete(photo.id)}
+              onClick={() => setDeleteTarget(photo.id)}
               disabled={deleting === photo.id}
               className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
             >
@@ -97,6 +99,31 @@ export default function PhotoGallery({ projectId, taskId }: PhotoGalleryProps) {
               {photos[lightboxIndex].caption}
             </div>
           )}
+        </div>
+      )}
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Photo</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to delete this photo? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteTarget)}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

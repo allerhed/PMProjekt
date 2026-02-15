@@ -21,6 +21,7 @@ import ProductListPage from './pages/products/ProductListPage';
 import FormBuilderPage from './pages/admin/FormBuilderPage';
 import TaskReportPage from './pages/admin/TaskReportPage';
 import BackupPage from './pages/admin/BackupPage';
+import BugReportsPage from './pages/admin/BugReportsPage';
 import MyTasksPage from './pages/tasks/MyTasksPage';
 import PublicSigningPage from './pages/protocols/PublicSigningPage';
 import NetworkStatus from './components/common/NetworkStatus';
@@ -82,6 +83,7 @@ function AppRoutes() {
         <Route path="/admin/form-builder" element={<FormBuilderPage />} />
         <Route path="/admin/task-report" element={<TaskReportPage />} />
         <Route path="/admin/backups" element={<BackupPage />} />
+        <Route path="/admin/bug-reports" element={<BugReportsPage />} />
       </Route>
 
       {/* Default redirect */}
