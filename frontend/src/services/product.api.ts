@@ -51,4 +51,34 @@ export const productApi = {
     const res = await api.delete(`/projects/${projectId}/tasks/${taskId}/products/${productId}`);
     return res.data;
   },
+
+  async downloadTemplate() {
+    const res = await api.get('/products/template', { responseType: 'blob' });
+    triggerDownload(res.data, 'product-template.xlsx');
+  },
+
+  async exportProducts() {
+    const res = await api.get('/products/export', { responseType: 'blob' });
+    triggerDownload(res.data, 'products-export.xlsx');
+  },
+
+  async importProducts(file: File): Promise<{ created: number }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/products/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data;
+  },
 };
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}

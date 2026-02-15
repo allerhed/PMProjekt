@@ -3,6 +3,7 @@ import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct } fro
 import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { productApi } from '../../services/product.api';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Product } from '../../types';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -21,6 +22,13 @@ export default function ProductListPage() {
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [form, setForm] = useState(initialForm);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
+
+  // Import/Export state
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created?: number; errors?: { row: number; messages: string[] }[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useProducts({ search: search || undefined, page, limit: 50 });
   const createProduct = useCreateProduct();
@@ -100,11 +108,62 @@ export default function ProductListPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await productApi.exportProducts();
+    } catch {
+      // Silently fail — user will see no download
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    try {
+      const result = await productApi.importProducts(file);
+      setImportResult({ created: result.created });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const errors = (err as any)?.response?.data?.error?.details?.errors;
+      if (errors) {
+        setImportResult({ errors });
+      } else {
+        setImportResult({ errors: [{ row: 0, messages: ['Failed to import file. Make sure it is a valid .xlsx file.'] }] });
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Product Catalog</h1>
-        <Button onClick={openCreate}>Add Product</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => productApi.downloadTemplate()}>
+            Template
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting}>
+            Export
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => importInputRef.current?.click()} loading={importing}>
+            Import
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <Button onClick={openCreate}>Add Product</Button>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -216,6 +275,46 @@ export default function ProductListPage() {
           <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button variant="danger" onClick={handleDelete} loading={deleteProduct.isPending}>Delete</Button>
         </div>
+      </Modal>
+
+      {/* Import Result Modal */}
+      <Modal isOpen={!!importResult} onClose={() => setImportResult(null)} title={importResult?.created ? 'Import Successful' : 'Import Errors'} size="md">
+        {importResult?.created ? (
+          <div className="text-center py-4">
+            <div className="text-green-600 text-4xl font-bold mb-2">{importResult.created}</div>
+            <p className="text-sm text-gray-600">products imported successfully</p>
+            <div className="flex justify-end mt-6">
+              <Button onClick={() => setImportResult(null)}>Close</Button>
+            </div>
+          </div>
+        ) : importResult?.errors ? (
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              Fix the following errors in your spreadsheet and try again:
+            </p>
+            <div className="max-h-64 overflow-y-auto border rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Row</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Errors</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {importResult.errors.map((err, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{err.row || '-'}</td>
+                      <td className="px-3 py-2 text-red-600">{err.messages.join('; ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button variant="secondary" onClick={() => setImportResult(null)}>Close</Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

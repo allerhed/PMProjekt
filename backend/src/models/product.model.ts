@@ -34,6 +34,16 @@ export interface TaskProductWithDetails extends TaskProductRow {
   product_comment: string | null;
 }
 
+export async function findAllProductsByOrganization(
+  organizationId: string,
+): Promise<ProductRow[]> {
+  const result = await pool.query(
+    `SELECT p.* FROM products p WHERE p.organization_id = $1 ORDER BY p.name ASC`,
+    [organizationId],
+  );
+  return result.rows;
+}
+
 export async function findProductsByOrganization(
   organizationId: string,
   pagination: { limit: number; offset: number },

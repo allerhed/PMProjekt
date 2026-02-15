@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
+import multer from 'multer';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
@@ -14,10 +15,13 @@ import * as productModel from '../models/product.model';
 import * as storageService from '../services/storage.service';
 import * as storageTracking from '../services/storageTracking.service';
 import * as thumbnailService from '../services/thumbnail.service';
+import * as excelService from '../services/excel.service';
 import { validateCustomFields } from '../services/customFieldValidation.service';
+import * as customFieldModel from '../models/customField.model';
 import { param } from '../utils/params';
 
 const router = Router({ mergeParams: true });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // All product routes require authentication
 router.use(authenticate);
@@ -96,6 +100,102 @@ router.post(
       });
 
       sendSuccess(res, { product }, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /api/v1/products/template — download empty Excel template
+router.get('/template', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const customFields = await customFieldModel.findByOrganizationAndEntity(
+      req.user!.organizationId,
+      'product',
+    );
+    const workbook = excelService.generateTemplate(customFields);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="product-template.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/products/export — download all products as Excel
+router.get('/export', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [products, customFields] = await Promise.all([
+      productModel.findAllProductsByOrganization(req.user!.organizationId),
+      customFieldModel.findByOrganizationAndEntity(req.user!.organizationId, 'product'),
+    ]);
+    const workbook = excelService.generateExport(products, customFields);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="products-export.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/products/import — bulk import products from Excel
+router.post(
+  '/import',
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN, UserRole.PROJECT_MANAGER),
+  upload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.file) {
+        sendError(res, 400, 'NO_FILE', 'No file uploaded');
+        return;
+      }
+
+      const customFields = await customFieldModel.findByOrganizationAndEntity(
+        req.user!.organizationId,
+        'product',
+      );
+
+      const { valid, errors } = await excelService.parseImport(req.file.buffer, customFields);
+
+      if (errors.length > 0) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Some rows have errors', { errors, validCount: valid.length });
+        return;
+      }
+
+      if (valid.length === 0) {
+        sendError(res, 400, 'EMPTY_FILE', 'No product rows found in the file');
+        return;
+      }
+
+      const created: productModel.ProductRow[] = [];
+      for (const item of valid) {
+        const product = await productModel.createProduct({
+          organizationId: req.user!.organizationId,
+          productId: item.productId,
+          name: item.name,
+          description: item.description,
+          link: item.link,
+          comment: item.comment,
+          customFields: item.customFields,
+          createdBy: req.user!.userId,
+        });
+        created.push(product);
+      }
+
+      logAuditAction({
+        organizationId: req.user!.organizationId,
+        userId: req.user!.userId,
+        action: 'product.bulk_imported',
+        resourceType: 'product',
+        metadata: { count: created.length },
+        ipAddress: (req.ip as string || ''),
+      });
+
+      sendSuccess(res, { created: created.length }, 201);
     } catch (err) {
       next(err);
     }

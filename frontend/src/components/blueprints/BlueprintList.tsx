@@ -46,10 +46,11 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
     }));
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  async function handleDelete(e: React.MouseEvent, blueprintId: string) {
-    e.stopPropagation();
+  async function handleDelete(blueprintId: string) {
     setDeleteError(null);
+    setDeleteTarget(null);
     try {
       await uploadApi.deleteBlueprint(projectId, blueprintId);
       queryClient.invalidateQueries({ queryKey: ['blueprints', projectId] });
@@ -129,7 +130,7 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
                 <p className="text-xs text-gray-500">{(bp.file_size_bytes / (1024 * 1024)).toFixed(1)} MB</p>
               </div>
               <button
-                onClick={(e) => handleDelete(e, bp.id)}
+                onClick={(e) => { e.stopPropagation(); setDeleteTarget(bp.id); }}
                 className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
               >
                 x
@@ -165,6 +166,31 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
             annotations={annotations}
             onAnnotationClick={handleAnnotationClick}
           />
+        </div>
+      )}
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Blueprint</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to delete this blueprint? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteTarget)}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
