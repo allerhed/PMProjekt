@@ -12,6 +12,9 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+# Add .mjs MIME type (not in default nginx mime.types, needed for pdfjs worker)
+RUN sed -i 's|application/javascript.*js;|application/javascript js mjs;|' /etc/nginx/mime.types
+
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
