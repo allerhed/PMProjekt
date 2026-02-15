@@ -37,7 +37,7 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: config.env === 'production'
-    ? process.env.FRONTEND_URL
+    ? [process.env.FRONTEND_URL || 'https://taskproof.work', 'https://api.taskproof.work']
     : ['http://localhost:5173', 'http://localhost:3001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],

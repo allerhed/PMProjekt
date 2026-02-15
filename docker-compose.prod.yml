@@ -30,7 +30,7 @@ services:
       AZURE_STORAGE_ACCOUNT_KEY: ${AZURE_STORAGE_ACCOUNT_KEY:?AZURE_STORAGE_ACCOUNT_KEY is required}
       AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-files}
       EMAIL_SENDER: ${EMAIL_SENDER:-noreply@taskproof.se}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      FRONTEND_URL: ${FRONTEND_URL:-https://taskproof.work}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
     restart: unless-stopped
@@ -39,6 +39,11 @@ services:
     image: ${ACR_REGISTRY}/construction-manager-frontend:${IMAGE_TAG:-latest}
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt/live/taskproof.work/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - /etc/letsencrypt/live/taskproof.work/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - /etc/letsencrypt/archive/taskproof.work:/etc/letsencrypt/archive/taskproof.work:ro
     depends_on:
       - backend
     restart: unless-stopped
