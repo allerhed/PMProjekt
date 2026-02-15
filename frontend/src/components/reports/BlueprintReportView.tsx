@@ -16,10 +16,16 @@ const statusColors: Record<string, string> = {
   verified: '#3b82f6',
 };
 
+export interface TaskMarkerGroup {
+  taskNumber: number;
+  markers: Array<{ x: number; y: number; page: number }>;
+}
+
 interface BlueprintReportViewProps {
   blueprintName: string;
   pdfUrl: string;
   annotations: Annotation[];
+  taskMarkers?: TaskMarkerGroup[];
 }
 
 interface RenderedPage {
@@ -33,6 +39,7 @@ export default function BlueprintReportView({
   blueprintName,
   pdfUrl,
   annotations,
+  taskMarkers = [],
 }: BlueprintReportViewProps) {
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +181,36 @@ export default function BlueprintReportView({
                   </div>
                 );
               })}
+              {/* Marker overlays */}
+              {taskMarkers.map((group) =>
+                group.markers
+                  .filter((m) => m.page === page.pageNum)
+                  .map((m, idx) => (
+                    <div
+                      key={`${group.taskNumber}-${idx}`}
+                      className="absolute"
+                      style={{
+                        left: `${m.x * 100}%`,
+                        top: `${m.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      <span
+                        className="flex items-center justify-center text-white font-bold text-xs rounded-full"
+                        style={{
+                          backgroundColor: '#3b82f6',
+                          width: '26px',
+                          height: '26px',
+                          border: '2px solid white',
+                          fontSize: '9px',
+                        }}
+                      >
+                        {group.taskNumber}-{idx + 1}
+                      </span>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
         );

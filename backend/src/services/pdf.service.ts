@@ -19,10 +19,16 @@ export interface BlueprintAnnotation {
   page: number; // 1-indexed
 }
 
+export interface BlueprintMarker {
+  taskNumber: number;
+  markers: Array<{ x: number; y: number; page: number }>;
+}
+
 export interface BlueprintData {
   name: string;
   pdfBuffer: Buffer;
   annotations: BlueprintAnnotation[];
+  markers?: BlueprintMarker[];
 }
 
 export interface PdfGenerationData {
@@ -581,6 +587,71 @@ async function embedBlueprints(
             font: helveticaBold,
             color: rgb(1, 1, 1),
           });
+        }
+
+        // Draw markers for this page
+        const MARKER_BLUE = { r: 0.231, g: 0.510, b: 0.965 };
+        if (blueprint.markers) {
+          for (const group of blueprint.markers) {
+            const pageGroupMarkers = group.markers.filter((m) => m.page === pageIdx + 1);
+            for (let mi = 0; mi < pageGroupMarkers.length; mi++) {
+              const m = pageGroupMarkers[mi];
+              // Convert normalized coords to PDF coords (origin bottom-left)
+              const mx = m.x * pageWidth;
+              const my = pageHeight - m.y * pageHeight;
+
+              // Target dot
+              newPage.drawCircle({
+                x: mx,
+                y: my,
+                size: 4,
+                color: rgb(MARKER_BLUE.r, MARKER_BLUE.g, MARKER_BLUE.b),
+                borderColor: rgb(1, 1, 1),
+                borderWidth: 1,
+              });
+
+              // Label circle offset
+              const labelX = mx + 18;
+              const labelY = my + 18;
+              const markerRadius = 12;
+
+              // Leader line
+              newPage.drawLine({
+                start: { x: mx, y: my },
+                end: { x: labelX, y: labelY },
+                thickness: 1,
+                color: rgb(MARKER_BLUE.r, MARKER_BLUE.g, MARKER_BLUE.b),
+                opacity: 0.7,
+              });
+
+              // White border circle
+              newPage.drawCircle({
+                x: labelX,
+                y: labelY,
+                size: markerRadius + 2,
+                color: rgb(1, 1, 1),
+              });
+
+              // Blue circle
+              newPage.drawCircle({
+                x: labelX,
+                y: labelY,
+                size: markerRadius,
+                color: rgb(MARKER_BLUE.r, MARKER_BLUE.g, MARKER_BLUE.b),
+              });
+
+              // Label text
+              const labelStr = `${group.taskNumber}-${mi + 1}`;
+              const labelTextWidth = helveticaBold.widthOfTextAtSize(labelStr, 7);
+              newPage.drawText(labelStr, {
+                x: labelX - labelTextWidth / 2,
+                y: labelY - 2.5,
+                size: 7,
+                font: helveticaBold,
+                color: rgb(1, 1, 1),
+              });
+            }
+          }
         }
 
         insertIndex++;

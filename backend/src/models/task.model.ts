@@ -24,6 +24,7 @@ export interface TaskRow {
   annotation_width: number | null;
   annotation_height: number | null;
   annotation_page: number | null;
+  annotation_markers: Array<{ id: string; x: number; y: number; page: number }> | null;
   custom_fields: Record<string, unknown> | null;
 }
 
@@ -203,13 +204,14 @@ export async function createTask(data: {
   annotationWidth?: number;
   annotationHeight?: number;
   annotationPage?: number;
+  annotationMarkers?: Array<{ id: string; x: number; y: number; page: number }> | null;
   customFields?: Record<string, unknown>;
 }): Promise<TaskRow> {
   const result = await pool.query(
     `INSERT INTO tasks (project_id, task_number, blueprint_id, title, description, status, priority, trade,
        location_x, location_y, assigned_to_user, assigned_to_contractor_email, created_by,
-       annotation_x, annotation_y, annotation_width, annotation_height, annotation_page, custom_fields)
-     VALUES ($1, (SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE project_id = $1), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *`,
+       annotation_x, annotation_y, annotation_width, annotation_height, annotation_page, annotation_markers, custom_fields)
+     VALUES ($1, (SELECT COALESCE(MAX(task_number), 0) + 1 FROM tasks WHERE project_id = $1), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING *`,
     [
       data.projectId, data.blueprintId || null, data.title, data.description || null,
       data.status || 'open', data.priority || 'normal', data.trade || null,
@@ -219,6 +221,7 @@ export async function createTask(data: {
       data.annotationX ?? null, data.annotationY ?? null,
       data.annotationWidth ?? null, data.annotationHeight ?? null,
       data.annotationPage ?? null,
+      data.annotationMarkers ? JSON.stringify(data.annotationMarkers) : null,
       JSON.stringify(data.customFields || {}),
     ],
   );
@@ -252,6 +255,7 @@ export async function updateTask(
     annotationWidth: 'annotation_width',
     annotationHeight: 'annotation_height',
     annotationPage: 'annotation_page',
+    annotationMarkers: 'annotation_markers',
     customFields: 'custom_fields',
   };
 
@@ -259,7 +263,7 @@ export async function updateTask(
     const dbField = fieldMap[key] || key;
     if (value !== undefined) {
       fields.push(`${dbField} = $${paramIndex}`);
-      values.push(dbField === 'custom_fields' ? JSON.stringify(value) : value);
+      values.push(dbField === 'custom_fields' || dbField === 'annotation_markers' ? JSON.stringify(value) : value);
       paramIndex++;
     }
   }

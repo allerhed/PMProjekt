@@ -5,7 +5,7 @@ import * as protocolModel from '../models/protocol.model';
 import * as organizationModel from '../models/organization.model';
 import * as taskPhotoModel from '../models/taskPhoto.model';
 import * as blueprintModel from '../models/blueprint.model';
-import { generateProtocolPdf, TaskPhoto, BlueprintData, BlueprintAnnotation } from './pdf.service';
+import { generateProtocolPdf, TaskPhoto, BlueprintData, BlueprintAnnotation, BlueprintMarker } from './pdf.service';
 import { buildS3Key, writeFile, readFile } from './storage.service';
 import { incrementStorageUsed } from './storageTracking.service';
 import { logAuditAction } from './audit.service';
@@ -121,10 +121,24 @@ export async function startProtocolGeneration(params: ProtocolGenerationParams):
               page: t.annotation_page!,
             }));
 
+          // Gather markers from tasks that reference this blueprint
+          const bpMarkers: BlueprintMarker[] = tasks
+            .filter(
+              (t) =>
+                t.blueprint_id === bp.id &&
+                Array.isArray(t.annotation_markers) &&
+                t.annotation_markers.length > 0,
+            )
+            .map((t) => ({
+              taskNumber: t.task_number,
+              markers: t.annotation_markers!,
+            }));
+
           blueprints.push({
             name: bp.name,
             pdfBuffer,
             annotations,
+            markers: bpMarkers.length > 0 ? bpMarkers : undefined,
           });
         } catch (err) {
           logger.warn({ err, blueprintId: bp.id }, 'Failed to read blueprint for protocol PDF');

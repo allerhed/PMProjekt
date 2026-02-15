@@ -124,6 +124,7 @@ CREATE TABLE tasks (
   annotation_width FLOAT,
   annotation_height FLOAT,
   annotation_page INTEGER,
+  annotation_markers JSONB,
   custom_fields JSONB DEFAULT '{}'::jsonb,
   UNIQUE(project_id, task_number)
 );

@@ -18,7 +18,7 @@ import PhotoUploader from '../../components/uploads/PhotoUploader';
 import PhotoGallery from '../../components/photos/PhotoGallery';
 import PdfAnnotationViewer from '../../components/blueprints/PdfAnnotationViewer';
 import CustomFieldsRenderer from '../../components/common/CustomFieldsRenderer';
-import type { Annotation } from '../../components/blueprints/PdfAnnotationViewer';
+import type { Annotation, Marker } from '../../components/blueprints/PdfAnnotationViewer';
 import { format } from 'date-fns';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -50,6 +50,8 @@ export default function TaskDetailPage() {
   const [removeProductTarget, setRemoveProductTarget] = useState<{ taskId: string; productId: string; productName: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', priority: '', trade: '' });
+  const [markerPlaceMode, setMarkerPlaceMode] = useState(false);
+  const [deleteMarkerTarget, setDeleteMarkerTarget] = useState<string | null>(null);
 
   // Task products
   const { data: taskProducts = [], isLoading: taskProductsLoading } = useTaskProducts(projectId!, taskId!);
@@ -163,6 +165,41 @@ export default function TaskDetailPage() {
       },
     });
     setEditing(false);
+  }
+
+  // Marker data and handlers
+  const markers: Marker[] = task.annotation_markers || [];
+
+  async function handleMarkerPlace(point: { x: number; y: number; page: number }) {
+    const newMarker: Marker = {
+      id: crypto.randomUUID(),
+      x: point.x,
+      y: point.y,
+      page: point.page,
+    };
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: { annotationMarkers: [...markers, newMarker] },
+    });
+    setMarkerPlaceMode(false);
+  }
+
+  async function handleMarkerMove(id: string, x: number, y: number) {
+    const updated = markers.map((m) => (m.id === id ? { ...m, x, y } : m));
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: { annotationMarkers: updated },
+    });
+  }
+
+  async function confirmMarkerDelete() {
+    if (!deleteMarkerTarget) return;
+    const remaining = markers.filter((m) => m.id !== deleteMarkerTarget);
+    await updateTask.mutateAsync({
+      taskId: taskId!,
+      data: { annotationMarkers: remaining.length > 0 ? remaining : null },
+    });
+    setDeleteMarkerTarget(null);
   }
 
   return (
@@ -340,14 +377,23 @@ export default function TaskDetailPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-900">Blueprint Annotation</h2>
             <div className="flex gap-2">
-              {activeBlueprint && !drawMode && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setDrawMode(true)}
-                >
-                  {taskAnnotation ? 'Redraw' : 'Draw Annotation'}
-                </Button>
+              {activeBlueprint && !drawMode && !markerPlaceMode && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setDrawMode(true)}
+                  >
+                    {taskAnnotation ? 'Redraw' : 'Draw Annotation'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setMarkerPlaceMode(true)}
+                  >
+                    Add Marker
+                  </Button>
+                </>
               )}
               {activeBlueprint && drawMode && (
                 <Button
@@ -358,7 +404,16 @@ export default function TaskDetailPage() {
                   Cancel
                 </Button>
               )}
-              {taskAnnotation && !drawMode && (
+              {activeBlueprint && markerPlaceMode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setMarkerPlaceMode(false)}
+                >
+                  Cancel
+                </Button>
+              )}
+              {taskAnnotation && !drawMode && !markerPlaceMode && (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -418,6 +473,12 @@ export default function TaskDetailPage() {
                 drawMode={drawMode}
                 onAnnotationDraw={handleAnnotationDraw}
                 initialPage={taskAnnotation?.page || 1}
+                markers={markers}
+                markerPlaceMode={markerPlaceMode}
+                onMarkerPlace={handleMarkerPlace}
+                onMarkerMove={handleMarkerMove}
+                onMarkerDelete={(id) => setDeleteMarkerTarget(id)}
+                taskNumber={task.task_number}
               />
             </div>
           ) : (
@@ -576,6 +637,23 @@ export default function TaskDetailPage() {
               await removeProductFromTask.mutateAsync({ taskId: removeProductTarget.taskId, productId: removeProductTarget.productId });
               setRemoveProductTarget(null);
             }}
+          >
+            Remove
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Delete Marker Confirmation Modal */}
+      <Modal isOpen={!!deleteMarkerTarget} onClose={() => setDeleteMarkerTarget(null)} title="Remove Marker" size="sm">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to remove this marker from the blueprint?
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setDeleteMarkerTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={updateTask.isPending}
+            onClick={confirmMarkerDelete}
           >
             Remove
           </Button>

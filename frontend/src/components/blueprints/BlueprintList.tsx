@@ -5,7 +5,7 @@ import { uploadApi } from '../../services/upload.api';
 import { useTasksByBlueprint } from '../../hooks/useTasks';
 import BlueprintUploader from '../uploads/BlueprintUploader';
 import BlueprintViewer from './BlueprintViewer';
-import type { Annotation } from './PdfAnnotationViewer';
+import type { Annotation, Marker } from './PdfAnnotationViewer';
 import Spinner from '../ui/Spinner';
 import EmptyState from '../ui/EmptyState';
 import Button from '../ui/Button';
@@ -44,6 +44,16 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
       height: t.annotation_height,
       page: t.annotation_page,
     }));
+
+  // Collect markers from all tasks on this blueprint (with pre-computed labels)
+  const allMarkers: Marker[] = blueprintTasks
+    .filter((t: any) => Array.isArray(t.annotation_markers) && t.annotation_markers.length > 0)
+    .flatMap((t: any) =>
+      (t.annotation_markers as Array<{ id: string; x: number; y: number; page: number }>).map((m, idx) => ({
+        ...m,
+        label: `${t.task_number}-${idx + 1}`,
+      })),
+    );
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -164,6 +174,7 @@ export default function BlueprintList({ projectId, onSelect }: BlueprintListProp
             imageUrl={viewingBlueprint.download_url}
             mimeType={viewingBlueprint.mime_type}
             annotations={annotations}
+            annotationMarkers={allMarkers}
             onAnnotationClick={handleAnnotationClick}
           />
         </div>

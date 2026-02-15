@@ -15,6 +15,12 @@ export const createTaskSchema = z.object({
   annotationWidth: z.number().min(0).max(1).nullable().optional(),
   annotationHeight: z.number().min(0).max(1).nullable().optional(),
   annotationPage: z.number().int().min(1).nullable().optional(),
+  annotationMarkers: z.array(z.object({
+    id: z.string().uuid(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    page: z.number().int().min(1),
+  })).nullable().optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -34,6 +40,12 @@ export const updateTaskSchema = z.object({
   annotationWidth: z.number().min(0).max(1).nullable().optional(),
   annotationHeight: z.number().min(0).max(1).nullable().optional(),
   annotationPage: z.number().int().min(1).nullable().optional(),
+  annotationMarkers: z.array(z.object({
+    id: z.string().uuid(),
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    page: z.number().int().min(1),
+  })).nullable().optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
 });
 

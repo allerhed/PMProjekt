@@ -19,6 +19,14 @@ export interface Annotation {
   page: number;
 }
 
+export interface Marker {
+  id: string;
+  x: number; // Normalized 0-1
+  y: number;
+  page: number;
+  label?: string; // Optional custom label; overrides auto-generated
+}
+
 interface PdfAnnotationViewerProps {
   pdfUrl: string;
   annotations?: Annotation[];
@@ -26,6 +34,13 @@ interface PdfAnnotationViewerProps {
   onAnnotationDraw?: (rect: { x: number; y: number; width: number; height: number; page: number }) => void;
   onAnnotationClick?: (taskId: string) => void;
   initialPage?: number;
+  // Marker props
+  markers?: Marker[];
+  markerPlaceMode?: boolean;
+  onMarkerPlace?: (point: { x: number; y: number; page: number }) => void;
+  onMarkerMove?: (id: string, x: number, y: number) => void;
+  onMarkerDelete?: (id: string) => void;
+  taskNumber?: number;
 }
 
 const statusColors: Record<string, string> = {
@@ -34,6 +49,12 @@ const statusColors: Record<string, string> = {
   completed: '#22c55e',
   verified: '#3b82f6',
 };
+
+const MARKER_COLOR = '#3b82f6';
+const LABEL_RADIUS = 14;
+const TARGET_RADIUS = 5;
+const LABEL_OFFSET_X = 22;
+const LABEL_OFFSET_Y = -22;
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
@@ -46,6 +67,12 @@ export default function PdfAnnotationViewer({
   onAnnotationDraw,
   onAnnotationClick,
   initialPage = 1,
+  markers = [],
+  markerPlaceMode = false,
+  onMarkerPlace,
+  onMarkerMove,
+  onMarkerDelete,
+  taskNumber,
 }: PdfAnnotationViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +91,10 @@ export default function PdfAnnotationViewer({
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
+
+  // Marker dragging state
+  const [draggingMarkerId, setDraggingMarkerId] = useState<string | null>(null);
+  const [dragMarkerPos, setDragMarkerPos] = useState<{ x: number; y: number } | null>(null);
 
   // Load PDF document
   useEffect(() => {
@@ -147,8 +178,14 @@ export default function PdfAnnotationViewer({
     return { x, y };
   }, [pan, zoom, canvasSize]);
 
-  // Pointer handlers for drawing and panning
+  // Pointer handlers for drawing, panning, and marker placement/dragging
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (markerPlaceMode && onMarkerPlace) {
+      const pos = pointerToNormalized(e.clientX, e.clientY);
+      if (!pos || pos.x < 0 || pos.x > 1 || pos.y < 0 || pos.y > 1) return;
+      onMarkerPlace({ x: pos.x, y: pos.y, page: currentPage });
+      return;
+    }
     if (drawMode && onAnnotationDraw) {
       const pos = pointerToNormalized(e.clientX, e.clientY);
       if (!pos || pos.x < 0 || pos.x > 1 || pos.y < 0 || pos.y > 1) return;
@@ -160,10 +197,18 @@ export default function PdfAnnotationViewer({
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [drawMode, onAnnotationDraw, pointerToNormalized, pan]);
+  }, [drawMode, markerPlaceMode, onAnnotationDraw, onMarkerPlace, pointerToNormalized, pan, currentPage]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (isDrawing) {
+    if (draggingMarkerId) {
+      const pos = pointerToNormalized(e.clientX, e.clientY);
+      if (pos) {
+        setDragMarkerPos({
+          x: Math.max(0, Math.min(1, pos.x)),
+          y: Math.max(0, Math.min(1, pos.y)),
+        });
+      }
+    } else if (isDrawing) {
       const pos = pointerToNormalized(e.clientX, e.clientY);
       if (pos) {
         setDrawCurrent({
@@ -174,9 +219,15 @@ export default function PdfAnnotationViewer({
     } else if (isDragging) {
       setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
     }
-  }, [isDrawing, isDragging, pointerToNormalized, dragStart]);
+  }, [draggingMarkerId, isDrawing, isDragging, pointerToNormalized, dragStart]);
 
   const handlePointerUp = useCallback(() => {
+    if (draggingMarkerId && dragMarkerPos && onMarkerMove) {
+      onMarkerMove(draggingMarkerId, dragMarkerPos.x, dragMarkerPos.y);
+      setDraggingMarkerId(null);
+      setDragMarkerPos(null);
+      return;
+    }
     if (isDrawing && drawStart && drawCurrent && onAnnotationDraw) {
       const x = Math.min(drawStart.x, drawCurrent.x);
       const y = Math.min(drawStart.y, drawCurrent.y);
@@ -193,19 +244,26 @@ export default function PdfAnnotationViewer({
       setDrawCurrent(null);
     }
     setIsDragging(false);
-  }, [isDrawing, drawStart, drawCurrent, onAnnotationDraw, currentPage]);
+  }, [draggingMarkerId, dragMarkerPos, onMarkerMove, isDrawing, drawStart, drawCurrent, onAnnotationDraw, currentPage]);
 
   // Global pointer up handler
   useEffect(() => {
     function handleGlobalUp() {
       setIsDragging(false);
+      if (draggingMarkerId) {
+        setDraggingMarkerId(null);
+        setDragMarkerPos(null);
+      }
     }
     window.addEventListener('pointerup', handleGlobalUp);
     return () => window.removeEventListener('pointerup', handleGlobalUp);
-  }, []);
+  }, [draggingMarkerId]);
 
   // Filter annotations for the current page
   const pageAnnotations = annotations.filter((a) => a.page === currentPage);
+
+  // Filter markers for the current page
+  const pageMarkers = markers.filter((m) => m.page === currentPage);
 
   // Calculate drawing rectangle for SVG
   const drawRect = isDrawing && drawStart && drawCurrent ? {
@@ -214,6 +272,8 @@ export default function PdfAnnotationViewer({
     width: Math.abs(drawCurrent.x - drawStart.x),
     height: Math.abs(drawCurrent.y - drawStart.y),
   } : null;
+
+  const isInteractive = drawMode || markerPlaceMode;
 
   if (loading) {
     return (
@@ -271,13 +331,19 @@ export default function PdfAnnotationViewer({
         </div>
       )}
 
+      {markerPlaceMode && (
+        <div className="absolute top-12 left-2 z-10 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+          Click on the blueprint to place a marker
+        </div>
+      )}
+
       {/* Canvas + SVG overlay container */}
       <div
         ref={containerRef}
         className="relative overflow-hidden"
         style={{
           height: '600px',
-          cursor: drawMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab',
+          cursor: isInteractive ? 'crosshair' : isDragging ? 'grabbing' : 'grab',
           touchAction: 'none',
         }}
         onWheel={handleWheel}
@@ -289,7 +355,7 @@ export default function PdfAnnotationViewer({
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: '0 0',
-            transition: isDragging || isDrawing ? 'none' : 'transform 0.1s ease-out',
+            transition: isDragging || isDrawing || draggingMarkerId ? 'none' : 'transform 0.1s ease-out',
             position: 'relative',
             width: canvasSize.width,
             height: canvasSize.height,
@@ -305,11 +371,11 @@ export default function PdfAnnotationViewer({
               left: 0,
               width: '100%',
               height: '100%',
-              pointerEvents: drawMode ? 'none' : 'auto',
+              pointerEvents: isInteractive ? 'none' : 'auto',
             }}
             viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
           >
-            {/* Existing annotations */}
+            {/* Existing annotations (rectangles) */}
             {pageAnnotations.map((ann) => {
               const rx = ann.x * canvasSize.width;
               const ry = ann.y * canvasSize.height;
@@ -361,6 +427,106 @@ export default function PdfAnnotationViewer({
                   >
                     {ann.taskNumber}
                   </text>
+                </g>
+              );
+            })}
+
+            {/* Markers */}
+            {pageMarkers.map((marker, index) => {
+              const isDragTarget = draggingMarkerId === marker.id;
+              const mx = isDragTarget && dragMarkerPos ? dragMarkerPos.x : marker.x;
+              const my = isDragTarget && dragMarkerPos ? dragMarkerPos.y : marker.y;
+
+              const targetX = mx * canvasSize.width;
+              const targetY = my * canvasSize.height;
+              const labelX = targetX + LABEL_OFFSET_X;
+              const labelY = targetY + LABEL_OFFSET_Y;
+              const label = marker.label || (taskNumber != null ? `${taskNumber}-${index + 1}` : String(index + 1));
+
+              return (
+                <g key={marker.id}>
+                  {/* Leader line from target to label */}
+                  <line
+                    x1={targetX}
+                    y1={targetY}
+                    x2={labelX}
+                    y2={labelY}
+                    stroke={MARKER_COLOR}
+                    strokeWidth={1.5}
+                    strokeOpacity={0.7}
+                  />
+                  {/* Target dot (draggable) */}
+                  <circle
+                    cx={targetX}
+                    cy={targetY}
+                    r={TARGET_RADIUS}
+                    fill={MARKER_COLOR}
+                    stroke="white"
+                    strokeWidth={1.5}
+                    style={{ cursor: onMarkerMove ? 'move' : 'default', pointerEvents: 'auto' }}
+                    onPointerDown={(e) => {
+                      if (!onMarkerMove) return;
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setDraggingMarkerId(marker.id);
+                      setDragMarkerPos({ x: mx, y: my });
+                      (e.target as SVGElement).setPointerCapture(e.pointerId);
+                    }}
+                  />
+                  {/* Label circle */}
+                  <circle
+                    cx={labelX}
+                    cy={labelY}
+                    r={LABEL_RADIUS}
+                    fill={MARKER_COLOR}
+                    stroke="white"
+                    strokeWidth={2}
+                    style={{ pointerEvents: 'auto' }}
+                  />
+                  {/* Label text */}
+                  <text
+                    x={labelX}
+                    y={labelY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="white"
+                    fontSize={10}
+                    fontWeight="bold"
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  >
+                    {label}
+                  </text>
+                  {/* Delete button (small x circle, top-right of label) */}
+                  {onMarkerDelete && (
+                    <g
+                      style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkerDelete(marker.id);
+                      }}
+                    >
+                      <circle
+                        cx={labelX + LABEL_RADIUS * 0.7}
+                        cy={labelY - LABEL_RADIUS * 0.7}
+                        r={7}
+                        fill="#ef4444"
+                        stroke="white"
+                        strokeWidth={1.5}
+                      />
+                      <text
+                        x={labelX + LABEL_RADIUS * 0.7}
+                        y={labelY - LABEL_RADIUS * 0.7}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fill="white"
+                        fontSize={9}
+                        fontWeight="bold"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        x
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}

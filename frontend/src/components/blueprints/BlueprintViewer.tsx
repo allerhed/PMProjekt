@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Button from '../ui/Button';
 import PdfAnnotationViewer from './PdfAnnotationViewer';
-import type { Annotation } from './PdfAnnotationViewer';
+import type { Annotation, Marker } from './PdfAnnotationViewer';
 
 interface BlueprintViewerProps {
   imageUrl: string;
@@ -15,6 +15,7 @@ interface BlueprintViewerProps {
     title: string;
   }>;
   annotations?: Annotation[];
+  annotationMarkers?: Marker[];
   onMarkerClick?: (markerId: string) => void;
   onAnnotationClick?: (taskId: string) => void;
   onAnnotationDraw?: (rect: { x: number; y: number; width: number; height: number; page: number }) => void;
@@ -39,6 +40,7 @@ export default function BlueprintViewer({
   mimeType,
   markers = [],
   annotations = [],
+  annotationMarkers = [],
   onMarkerClick,
   onAnnotationClick,
   onAnnotationDraw,
@@ -110,6 +112,7 @@ export default function BlueprintViewer({
         drawMode={drawMode}
         onAnnotationDraw={onAnnotationDraw}
         onAnnotationClick={onAnnotationClick}
+        markers={annotationMarkers}
       />
     );
   }

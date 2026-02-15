@@ -5,6 +5,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { uploadApi } from '../../services/upload.api';
 import type { Annotation } from '../../components/blueprints/PdfAnnotationViewer';
 import BlueprintReportView from '../../components/reports/BlueprintReportView';
+import type { TaskMarkerGroup } from '../../components/reports/BlueprintReportView';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
@@ -41,7 +42,7 @@ export default function ProjectReportPage() {
     enabled: !!projectId,
   });
 
-  // 4. Derive annotations from tasks (grouped by blueprint)
+  // 4. Derive annotations and markers from tasks (grouped by blueprint)
   const blueprintsWithAnnotations = (blueprints as any[])
     .map((bp: any) => {
       const bpTasks = tasks.filter(
@@ -63,9 +64,18 @@ export default function ProjectReportPage() {
         height: t.annotation_height,
         page: t.annotation_page,
       }));
-      return { blueprint: bp, annotations };
+
+      // Collect markers from all tasks on this blueprint
+      const taskMarkers: TaskMarkerGroup[] = tasks
+        .filter((t: any) => t.blueprint_id === bp.id && Array.isArray(t.annotation_markers) && t.annotation_markers.length > 0)
+        .map((t: any) => ({
+          taskNumber: t.task_number,
+          markers: t.annotation_markers,
+        }));
+
+      return { blueprint: bp, annotations, taskMarkers };
     })
-    .filter((item) => item.annotations.length > 0);
+    .filter((item) => item.annotations.length > 0 || item.taskMarkers.length > 0);
 
   // 5. Photos for tasks that have them
   const tasksWithPhotos = tasks.filter((t: any) => t.photo_count > 0);
@@ -181,12 +191,13 @@ export default function ProjectReportPage() {
           <h2 className="text-lg font-bold text-gray-900 mb-1">Blueprints</h2>
           <div className="border-b border-gray-300 mb-6" />
 
-          {blueprintsWithAnnotations.map(({ blueprint, annotations }) => (
+          {blueprintsWithAnnotations.map(({ blueprint, annotations, taskMarkers }) => (
             <div key={blueprint.id} className="mb-8">
               <BlueprintReportView
                 blueprintName={blueprint.name}
                 pdfUrl={blueprint.download_url}
                 annotations={annotations}
+                taskMarkers={taskMarkers}
               />
             </div>
           ))}
