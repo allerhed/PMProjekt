@@ -35,9 +35,14 @@ api.interceptors.response.use(
       }
     }
 
-    const apiError = error.response?.data?.error;
-    const message = apiError?.message || error.message || 'An unexpected error occurred';
-    return Promise.reject(new Error(message));
+    // Override the generic Axios message with the API's error message,
+    // while preserving the full AxiosError (including response.data) so
+    // callers can access field-level validation details.
+    const apiMessage = error.response?.data?.error?.message;
+    if (apiMessage) {
+      error.message = apiMessage;
+    }
+    return Promise.reject(error);
   },
 );
 

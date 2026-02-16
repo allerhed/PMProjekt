@@ -182,7 +182,7 @@ function EditUserModal({
       await updateUser.mutateAsync({ id: user.id, data });
       onClose();
     } catch (err: any) {
-      setError(err?.response?.data?.error?.message || 'Failed to update user');
+      setError(err?.response?.data?.error?.message || err?.message || 'Failed to update user');
     }
   }
 
@@ -277,7 +277,7 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           .join('; ');
         setError(messages || errData?.message || 'Failed to create user');
       } else {
-        setError(errData?.message || 'Failed to create user');
+        setError(errData?.message || err?.message || 'Failed to create user');
       }
     }
   }
