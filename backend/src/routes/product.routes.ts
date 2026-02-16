@@ -296,9 +296,16 @@ router.delete(
       // Delete product image from storage if exists
       if (product.image_url) {
         try {
+          const fileSize = await storageService.checkFileExists(product.image_url);
           await storageService.deleteObject(product.image_url);
           if (product.thumbnail_url) {
             await storageService.deleteObject(product.thumbnail_url);
+          }
+          if (fileSize) {
+            await storageTracking.decrementStorageUsed(
+              req.user!.organizationId,
+              fileSize,
+            );
           }
         } catch {
           // Storage deletion failure is non-fatal
@@ -364,6 +371,22 @@ router.post(
         imageId,
         fileName,
       );
+
+      // Clean up old image if replacing
+      if (product.image_url) {
+        try {
+          const oldSize = await storageService.checkFileExists(product.image_url);
+          await storageService.deleteObject(product.image_url);
+          if (product.thumbnail_url) {
+            await storageService.deleteObject(product.thumbnail_url);
+          }
+          if (oldSize) {
+            await storageTracking.decrementStorageUsed(req.user!.organizationId, oldSize);
+          }
+        } catch {
+          // Old image cleanup failure is non-fatal
+        }
+      }
 
       // Update product with the S3 key (will be confirmed later)
       await productModel.updateProduct(product.id, { imageUrl: s3Key });

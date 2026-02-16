@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAdminStats, useAdminActivity } from '../../hooks/useAdminStats';
+import { adminApi } from '../../services/admin.api';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
@@ -69,6 +72,20 @@ interface ActivityEntry {
   user_last_name: string;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Super Admin',
+  org_admin: 'Org Admin',
+  project_manager: 'Project Manager',
+  field_user: 'Field User',
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  super_admin: 'bg-purple-100 text-purple-800',
+  org_admin: 'bg-blue-100 text-blue-800',
+  project_manager: 'bg-green-100 text-green-800',
+  field_user: 'bg-gray-100 text-gray-800',
+};
+
 interface AdminStats {
   totalProjects: number;
   activeProjects: number;
@@ -78,19 +95,38 @@ interface AdminStats {
   inProgressTasks: number;
   completedTasks: number;
   verifiedTasks: number;
+  taskCompletionRate: number;
   totalUsers: number;
   activeUsers: number;
+  usersByRole: Record<string, number>;
   storageUsedBytes: number;
   storageLimitBytes: number;
   storageUsedPercent: number;
+  weeklyLogins: number;
+  weeklyTasksCreated: number;
+  weeklyTasksCompleted: number;
 }
 
 export default function AdminDashboardPage() {
   const { data: stats, isLoading: statsLoading } = useAdminStats();
   const { data: activity, isLoading: activityLoading } = useAdminActivity();
+  const queryClient = useQueryClient();
+  const [recalculating, setRecalculating] = useState(false);
 
   const s = stats as AdminStats | undefined;
   const activityEntries = (activity as ActivityEntry[] | undefined) || [];
+
+  async function handleRecalculateStorage() {
+    setRecalculating(true);
+    try {
+      await adminApi.recalculateStorage();
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+    } catch {
+      // Silently fail — stats will still show current data
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   return (
     <div>
@@ -129,6 +165,20 @@ export default function AdminDashboardPage() {
                   <Badge variant="green">{s.completedTasks} done</Badge>
                   <Badge variant="purple">{s.verifiedTasks} verified</Badge>
                 </div>
+                {s.totalTasks > 0 && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>Completion rate</span>
+                      <span className="font-medium">{s.taskCompletionRate}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className="h-1.5 rounded-full bg-green-500 transition-all"
+                        style={{ width: `${Math.min(s.taskCompletionRate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </CardBody>
             </Card>
 
@@ -159,6 +209,62 @@ export default function AdminDashboardPage() {
                     style={{ width: `${Math.min(s.storageUsedPercent, 100)}%` }}
                   />
                 </div>
+                <button
+                  onClick={handleRecalculateStorage}
+                  disabled={recalculating}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                >
+                  {recalculating ? 'Recalculating...' : 'Recalculate'}
+                </button>
+              </CardBody>
+            </Card>
+          </div>
+
+          {/* Weekly Activity & Users by Role */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+            {/* Weekly Activity */}
+            <Card>
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-gray-900">This Week</h2>
+              </CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-blue-600">{s.weeklyLogins}</p>
+                    <p className="text-xs text-gray-500 mt-1">Logins</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{s.weeklyTasksCreated}</p>
+                    <p className="text-xs text-gray-500 mt-1">Tasks Created</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-purple-600">{s.weeklyTasksCompleted}</p>
+                    <p className="text-xs text-gray-500 mt-1">Tasks Completed</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+
+            {/* Users by Role */}
+            <Card>
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-gray-900">Users by Role</h2>
+              </CardHeader>
+              <CardBody>
+                {s.usersByRole && Object.keys(s.usersByRole).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(s.usersByRole).map(([role, count]) => (
+                      <div key={role} className="flex items-center justify-between">
+                        <span className={`text-xs font-medium px-2 py-1 rounded ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-800'}`}>
+                          {ROLE_LABELS[role] || role}
+                        </span>
+                        <span className="text-sm font-medium text-gray-900">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No active users.</p>
+                )}
               </CardBody>
             </Card>
           </div>

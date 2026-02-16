@@ -6,6 +6,7 @@ import { UserRole } from '../types';
 import pool from '../config/database';
 import config from '../config';
 import { getOrgStats, getRecentActivity, getUserActivity } from '../services/stats.service';
+import { recalculateStorageUsed } from '../services/storageTracking.service';
 
 const router = Router();
 router.use(authenticate);
@@ -113,6 +114,24 @@ router.get(
         },
         activeUsers: activeUsersResult.rows[0].count,
         uptime: Math.round(process.uptime()),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /api/v1/admin/storage/recalculate — recalculate storage from actual file sizes
+router.post(
+  '/storage/recalculate',
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await recalculateStorageUsed(req.user!.organizationId);
+      sendSuccess(res, {
+        previousBytes: result.previousBytes,
+        calculatedBytes: result.calculatedBytes,
+        drift: result.previousBytes - result.calculatedBytes,
       });
     } catch (err) {
       next(err);

@@ -255,6 +255,22 @@ router.post(
         fileName,
       );
 
+      // Clean up old image if replacing
+      if (project.image_url) {
+        try {
+          const oldSize = await storageService.checkFileExists(project.image_url);
+          await storageService.deleteObject(project.image_url);
+          if (project.thumbnail_url) {
+            await storageService.deleteObject(project.thumbnail_url);
+          }
+          if (oldSize) {
+            await storageTracking.decrementStorageUsed(req.user!.organizationId, oldSize);
+          }
+        } catch {
+          // Old image cleanup failure is non-fatal
+        }
+      }
+
       await projectModel.updateProject(project.id, req.user!.organizationId, {
         image_url: s3Key,
       });

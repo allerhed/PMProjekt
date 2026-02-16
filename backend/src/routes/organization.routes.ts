@@ -131,6 +131,22 @@ router.post(
         fileName,
       );
 
+      // Clean up old logo if replacing
+      if (organization.logo_url) {
+        try {
+          const oldSize = await storageService.checkFileExists(organization.logo_url);
+          await storageService.deleteObject(organization.logo_url);
+          if (organization.logo_thumbnail_url) {
+            await storageService.deleteObject(organization.logo_thumbnail_url);
+          }
+          if (oldSize) {
+            await storageTracking.decrementStorageUsed(req.user!.organizationId, oldSize);
+          }
+        } catch {
+          // Old logo cleanup failure is non-fatal
+        }
+      }
+
       await organizationModel.updateOrganization(organization.id, {
         logo_url: s3Key,
       });
