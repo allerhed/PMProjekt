@@ -268,7 +268,17 @@ function InviteUserModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       setForm({ email: '', firstName: '', lastName: '', role: 'field_user', password: '' });
       setCustomFields({});
     } catch (err: any) {
-      setError(err?.response?.data?.error?.message || 'Failed to create user');
+      const errData = err?.response?.data?.error;
+      const details = errData?.details;
+      if (details && typeof details === 'object') {
+        // Show field-level validation errors
+        const messages = Object.entries(details)
+          .map(([field, msg]) => `${field}: ${msg}`)
+          .join('; ');
+        setError(messages || errData?.message || 'Failed to create user');
+      } else {
+        setError(errData?.message || 'Failed to create user');
+      }
     }
   }
 
