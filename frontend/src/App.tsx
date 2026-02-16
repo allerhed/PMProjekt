@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
@@ -6,26 +6,28 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import { ToastProvider } from './components/common/Toast';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
-import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import ResetPasswordPage from './pages/auth/ResetPasswordPage';
-import ProjectListPage from './pages/projects/ProjectListPage';
-import ProjectDetailPage from './pages/projects/ProjectDetailPage';
-import TaskDetailPage from './pages/tasks/TaskDetailPage';
-import UserManagementPage from './pages/admin/UserManagementPage';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import OrgSettingsPage from './pages/admin/OrgSettingsPage';
-import ProfilePage from './pages/profile/ProfilePage';
-import ProductListPage from './pages/products/ProductListPage';
-import FormBuilderPage from './pages/admin/FormBuilderPage';
-import TaskReportPage from './pages/admin/TaskReportPage';
-import BackupPage from './pages/admin/BackupPage';
-import BugReportsPage from './pages/admin/BugReportsPage';
-import MyTasksPage from './pages/tasks/MyTasksPage';
-import PublicSigningPage from './pages/protocols/PublicSigningPage';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
+
+// Lazy-loaded page components
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'));
+const ProjectListPage = lazy(() => import('./pages/projects/ProjectListPage'));
+const ProjectDetailPage = lazy(() => import('./pages/projects/ProjectDetailPage'));
+const TaskDetailPage = lazy(() => import('./pages/tasks/TaskDetailPage'));
+const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const OrgSettingsPage = lazy(() => import('./pages/admin/OrgSettingsPage'));
+const ProfilePage = lazy(() => import('./pages/profile/ProfilePage'));
+const ProductListPage = lazy(() => import('./pages/products/ProductListPage'));
+const FormBuilderPage = lazy(() => import('./pages/admin/FormBuilderPage'));
+const TaskReportPage = lazy(() => import('./pages/admin/TaskReportPage'));
+const BackupPage = lazy(() => import('./pages/admin/BackupPage'));
+const BugReportsPage = lazy(() => import('./pages/admin/BugReportsPage'));
+const MyTasksPage = lazy(() => import('./pages/tasks/MyTasksPage'));
+const PublicSigningPage = lazy(() => import('./pages/protocols/PublicSigningPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,47 +51,49 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      {/* Auth routes */}
-      <Route
-        path="/login"
-        element={isAuthenticated ? <Navigate to="/projects" replace /> : <LoginPage />}
-      />
-      <Route
-        path="/register"
-        element={isAuthenticated ? <Navigate to="/projects" replace /> : <RegisterPage />}
-      />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/sign/:token" element={<PublicSigningPage />} />
+    <Suspense fallback={<FullPageSpinner />}>
+      <Routes>
+        {/* Auth routes */}
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/projects" replace /> : <LoginPage />}
+        />
+        <Route
+          path="/register"
+          element={isAuthenticated ? <Navigate to="/projects" replace /> : <RegisterPage />}
+        />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/sign/:token" element={<PublicSigningPage />} />
 
-      {/* Protected app routes */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/projects" element={<ProjectListPage />} />
-        <Route path="/my-tasks" element={<MyTasksPage />} />
-        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-        <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
-        <Route path="/products" element={<ProductListPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/admin/users" element={<UserManagementPage />} />
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-        <Route path="/admin/settings" element={<OrgSettingsPage />} />
-        <Route path="/admin/form-builder" element={<FormBuilderPage />} />
-        <Route path="/admin/task-report" element={<TaskReportPage />} />
-        <Route path="/admin/backups" element={<BackupPage />} />
-        <Route path="/admin/bug-reports" element={<BugReportsPage />} />
-      </Route>
+        {/* Protected app routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/projects" element={<ProjectListPage />} />
+          <Route path="/my-tasks" element={<MyTasksPage />} />
+          <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
+          <Route path="/products" element={<ProductListPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/admin/users" element={<UserManagementPage />} />
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          <Route path="/admin/settings" element={<OrgSettingsPage />} />
+          <Route path="/admin/form-builder" element={<FormBuilderPage />} />
+          <Route path="/admin/task-report" element={<TaskReportPage />} />
+          <Route path="/admin/backups" element={<BackupPage />} />
+          <Route path="/admin/bug-reports" element={<BugReportsPage />} />
+        </Route>
 
-      {/* Default redirect */}
-      <Route path="/" element={<Navigate to={isAuthenticated ? '/projects' : '/login'} replace />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to={isAuthenticated ? '/projects' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }
 

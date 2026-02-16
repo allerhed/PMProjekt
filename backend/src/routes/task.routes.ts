@@ -5,10 +5,13 @@ import { validate } from '../middleware/validate';
 import { parsePagination } from '../middleware/pagination';
 import { sendSuccess, sendError } from '../utils/response';
 import { logAuditAction } from '../services/audit.service';
+import { sendEmail } from '../services/email.service';
+import { renderTaskAssignment, renderTaskCompleted } from '../services/emailTemplate.service';
 import { UserRole } from '../types';
 import { createTaskSchema, updateTaskSchema } from '../validators/task.validators';
 import * as taskModel from '../models/task.model';
 import * as projectModel from '../models/project.model';
+import * as userModel from '../models/user.model';
 import { validateCustomFields } from '../services/customFieldValidation.service';
 import { param } from '../utils/params';
 
@@ -126,6 +129,23 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response,
       ipAddress: (req.ip as string || ''),
     });
 
+    // Send assignment email to contractor
+    if (task.assigned_to_contractor_email) {
+      const project = await projectModel.findProjectById(param(req.params.projectId), req.user!.organizationId);
+      const creator = await userModel.findUserById(req.user!.userId);
+      if (project && creator) {
+        const emailContent = renderTaskAssignment({
+          projectName: project.name,
+          taskTitle: task.title,
+          priority: task.priority,
+          trade: task.trade || '',
+          description: task.description || undefined,
+          assignedBy: `${creator.first_name} ${creator.last_name}`,
+        });
+        sendEmail({ to: task.assigned_to_contractor_email, ...emailContent });
+      }
+    }
+
     sendSuccess(res, { task }, 201);
   } catch (err) {
     next(err);
@@ -210,6 +230,24 @@ router.patch('/:taskId', validate(updateTaskSchema), async (req: Request, res: R
       },
       ipAddress: (req.ip as string || ''),
     });
+
+    // Notify PM when task is completed
+    if (req.body.status === 'completed') {
+      const project = await projectModel.findProjectById(param(req.params.projectId), req.user!.organizationId);
+      if (project) {
+        const pm = await userModel.findUserById(project.created_by);
+        const completer = await userModel.findUserById(req.user!.userId);
+        if (pm && completer) {
+          const emailContent = renderTaskCompleted({
+            firstName: pm.first_name,
+            projectName: project.name,
+            taskTitle: task.title,
+            completedBy: `${completer.first_name} ${completer.last_name}`,
+          });
+          sendEmail({ to: pm.email, ...emailContent });
+        }
+      }
+    }
 
     sendSuccess(res, { task });
   } catch (err) {

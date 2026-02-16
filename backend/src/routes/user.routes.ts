@@ -1,16 +1,25 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
 import { validate } from '../middleware/validate';
 import { parsePagination } from '../middleware/pagination';
 import { sendSuccess, sendError } from '../utils/response';
 import { logAuditAction } from '../services/audit.service';
+import { sendEmail } from '../services/email.service';
+import { renderUserInvitation } from '../services/emailTemplate.service';
+import { findOrganizationById } from '../models/organization.model';
+import config from '../config';
 import { UserRole } from '../types';
 import { hashPassword, comparePassword, validatePasswordPolicy } from '../utils/password';
 import * as userModel from '../models/user.model';
+import * as userExcelService from '../services/userExcel.service';
+import * as customFieldModel from '../models/customField.model';
 import { validateCustomFields } from '../services/customFieldValidation.service';
 import { z } from 'zod';
 import { param } from '../utils/params';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = Router();
 router.use(authenticate);
@@ -123,10 +132,134 @@ router.post(
         ipAddress: (req.ip as string || ''),
       });
 
-      // TODO: Send invitation email (Phase 5)
+      // Send invitation email
+      const org = await findOrganizationById(req.user!.organizationId);
+      if (org) {
+        const emailContent = renderUserInvitation({
+          firstName: req.body.firstName,
+          organizationName: org.name,
+          role: req.body.role,
+          loginUrl: `${config.frontendUrl}/login`,
+        });
+        sendEmail({ to: req.body.email, ...emailContent });
+      }
 
       const { password_hash: _password_hash, ...sanitized } = user;
       sendSuccess(res, { user: sanitized }, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /api/v1/users/template — download empty Excel template for bulk user import
+router.get(
+  '/template',
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const customFields = await customFieldModel.findByOrganizationAndEntity(
+        req.user!.organizationId,
+        'user',
+      );
+      const workbook = userExcelService.generateUserTemplate(customFields);
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="user-template.xlsx"');
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// POST /api/v1/users/import — bulk import users from Excel
+router.post(
+  '/import',
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN),
+  upload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.file) {
+        sendError(res, 400, 'NO_FILE', 'No file uploaded');
+        return;
+      }
+
+      const customFields = await customFieldModel.findByOrganizationAndEntity(
+        req.user!.organizationId,
+        'user',
+      );
+
+      const { valid, errors } = await userExcelService.parseUserImport(req.file.buffer, customFields);
+
+      if (errors.length > 0) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Some rows have errors', { errors, validCount: valid.length });
+        return;
+      }
+
+      if (valid.length === 0) {
+        sendError(res, 400, 'EMPTY_FILE', 'No user rows found in the file');
+        return;
+      }
+
+      // Check email uniqueness against DB for all rows
+      const dbErrors: userExcelService.ImportError[] = [];
+      const usersToCreate: typeof valid = [];
+
+      for (let i = 0; i < valid.length; i++) {
+        const item = valid[i];
+        const existing = await userModel.findUserByEmail(item.email);
+        if (existing) {
+          dbErrors.push({ row: i + 2, messages: [`Email "${item.email}" is already registered`] });
+        } else {
+          usersToCreate.push(item);
+        }
+      }
+
+      if (dbErrors.length > 0) {
+        sendError(res, 400, 'VALIDATION_ERROR', 'Some emails are already registered', { errors: dbErrors, validCount: usersToCreate.length });
+        return;
+      }
+
+      let created = 0;
+      for (const item of usersToCreate) {
+        const passwordToHash = item.password || `Temp${Date.now()}!`;
+        const policyError = validatePasswordPolicy(passwordToHash, item.email);
+        if (policyError) continue; // Already validated in parser, skip if somehow fails
+
+        const passwordHash = await hashPassword(passwordToHash);
+
+        let sanitizedCustomFields: Record<string, unknown> | undefined;
+        if (item.customFields) {
+          const cfResult = await validateCustomFields(req.user!.organizationId, 'user', item.customFields);
+          if (cfResult.valid) {
+            sanitizedCustomFields = cfResult.sanitized;
+          }
+        }
+
+        await userModel.createUser({
+          organizationId: req.user!.organizationId,
+          email: item.email,
+          passwordHash,
+          firstName: item.firstName,
+          lastName: item.lastName,
+          role: item.role as UserRole,
+          customFields: sanitizedCustomFields,
+        });
+        created++;
+      }
+
+      logAuditAction({
+        organizationId: req.user!.organizationId,
+        userId: req.user!.userId,
+        action: 'user.bulk_imported',
+        resourceType: 'user',
+        metadata: { count: created },
+        ipAddress: (req.ip as string || ''),
+      });
+
+      sendSuccess(res, { created }, 201);
     } catch (err) {
       next(err);
     }

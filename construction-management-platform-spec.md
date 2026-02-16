@@ -1,9 +1,11 @@
 # Construction Management Platform - Complete Technical Specification
 
-**Version:** 1.0
-**Date:** 2026-02-11
+**Version:** 2.0
+**Date:** 2026-02-15
 **Target Audience:** Development Team (Claude Code)
 **Deployment Model:** Single-tenant SaaS
+**Production URL:** https://taskproof.work
+**API URL:** https://api.taskproof.work
 **Initial Scale:** 5-10 organizations, <100 users each
 
 ---
@@ -140,23 +142,23 @@ Construction project managers waste 50%+ of their administrative time on manual 
 - JSONB columns for flexible metadata storage
 
 **File Storage:**
-- AWS S3 (photos, blueprints, generated PDFs)
-- Presigned URLs for secure direct uploads/downloads
-- Lifecycle policies for archival (delete after 3 years)
+- Azure Blob Storage (photos, blueprints, generated PDFs, backups)
+- SAS URLs for secure direct uploads/downloads
+- Local filesystem provider for development (switchable via `STORAGE_PROVIDER` env var)
 
 **Email Service:**
-- AWS SES for transactional emails
-- Nodemailer for email composition
-- Email parsing via webhook for contractor replies
+- SMTP via Nodemailer
+- Mailhog for development, configurable SMTP for production
+- Email parsing via webhook for contractor replies (planned)
 
 **Container Orchestration:**
 - Docker Compose for local development
-- Amazon ECS (Elastic Container Service) for production
-- Application Load Balancer for traffic distribution
+- Azure VM with Docker Compose for production
+- Azure Container Registry (ACR) for image storage
+- Nginx reverse proxy with SSL (Let's Encrypt)
 
 **Monitoring & Logging:**
-- CloudWatch for logs and metrics
-- Sentry for error tracking
+- Pino structured logging
 - Health check endpoints (/health, /ready)
 
 ### Container Architecture
@@ -168,7 +170,7 @@ Construction project managers waste 50%+ of their administrative time on manual 
    - Gzip compression enabled
    - Security headers configured
    - Reverse proxy to backend API
-   - Port: 80 (internal), mapped to 443 via ALB with SSL
+   - Port: 80/443 (SSL via Let's Encrypt)
 
 2. **Backend Container** (`backend:latest`)
    - Node.js Express application
@@ -179,15 +181,15 @@ Construction project managers waste 50%+ of their administrative time on manual 
 
 3. **Database Container** (`postgres:16-alpine`)
    - PostgreSQL with persistent volume
-   - Automated daily backups to S3
+   - Automated backups to Azure Blob Storage (configurable schedule)
    - Connection limit: 100 concurrent
    - Port: 5432 (internal network only)
 
 **Container Communication:**
 - Frontend → Backend: HTTP via internal Docker network
 - Backend → Database: PostgreSQL protocol via internal network
-- Backend → S3/SES: HTTPS via AWS SDK
-- External → Frontend: HTTPS via Application Load Balancer
+- Backend → Azure Blob Storage: HTTPS via Azure SDK
+- External → Frontend: HTTPS via Nginx with SSL termination
 
 **Resource Allocation (per organization instance):**
 - Frontend: 0.5 vCPU, 512 MB RAM
@@ -196,8 +198,8 @@ Construction project managers waste 50%+ of their administrative time on manual 
 
 **Scaling Strategy:**
 - Horizontal: Deploy additional backend containers behind load balancer
-- Vertical: Increase container resources for database under heavy load
-- Database: RDS Multi-AZ for high availability in Phase 2
+- Vertical: Increase VM/container resources for database under heavy load
+- Database: Managed PostgreSQL (Azure Database for PostgreSQL) for high availability in Phase 2
 
 ---
 
@@ -228,7 +230,7 @@ CREATE TABLE users (
 CREATE TABLE organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
-  subdomain VARCHAR(50) NOT NULL UNIQUE, -- e.g., acme.constructionapp.com
+  subdomain VARCHAR(50) NOT NULL UNIQUE, -- e.g., acme.taskproof.work
   logo_url VARCHAR(500),
   primary_color VARCHAR(7), -- Hex color for branding
   storage_used_bytes BIGINT DEFAULT 0,
@@ -267,7 +269,7 @@ CREATE TABLE blueprints (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
-  file_url VARCHAR(500) NOT NULL, -- S3 URL
+  file_url VARCHAR(500) NOT NULL, -- Azure Blob Storage URL
   file_size_bytes BIGINT NOT NULL,
   mime_type VARCHAR(50) NOT NULL,
   width_pixels INT,
@@ -312,7 +314,7 @@ CREATE TABLE tasks (
 CREATE TABLE task_photos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  file_url VARCHAR(500) NOT NULL, -- S3 URL
+  file_url VARCHAR(500) NOT NULL, -- Azure Blob Storage URL
   file_size_bytes BIGINT NOT NULL,
   thumbnail_url VARCHAR(500), -- Small preview
   caption VARCHAR(500),
@@ -344,7 +346,7 @@ CREATE TABLE protocols (
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   filters JSONB, -- Store filter criteria: { "trade": "Electrical", "status": "open" }
-  file_url VARCHAR(500) NOT NULL, -- S3 URL to PDF
+  file_url VARCHAR(500) NOT NULL, -- Azure Blob Storage URL to PDF
   file_size_bytes BIGINT NOT NULL,
   generated_by UUID REFERENCES users(id),
   generated_at TIMESTAMP DEFAULT NOW(),
@@ -386,6 +388,125 @@ CREATE TABLE password_reset_tokens (
 );
 ```
 
+### Products Table
+```sql
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  article_number VARCHAR(100),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  unit VARCHAR(50),
+  price DECIMAL(12,2),
+  category VARCHAR(100),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Task Products Table
+```sql
+CREATE TABLE task_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  quantity DECIMAL(12,2) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Custom Fields Table
+```sql
+CREATE TABLE custom_fields (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  field_type VARCHAR(50) NOT NULL,
+  options JSONB,
+  is_required BOOLEAN DEFAULT false,
+  sort_order INT DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Custom Field Values Table
+```sql
+CREATE TABLE custom_field_values (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  field_id UUID NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
+  value TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(task_id, field_id)
+);
+```
+
+### Backups Table
+```sql
+CREATE TABLE backups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  status VARCHAR(20) DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed')),
+  file_key VARCHAR(500),
+  file_size_bytes BIGINT,
+  error_message TEXT,
+  triggered_by VARCHAR(20) NOT NULL CHECK (triggered_by IN ('manual', 'scheduled')),
+  initiated_by UUID REFERENCES users(id),
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Backup Settings Table
+```sql
+CREATE TABLE backup_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE UNIQUE,
+  schedule_enabled BOOLEAN DEFAULT false,
+  schedule_cron VARCHAR(100) DEFAULT '0 3 * * *',
+  retention_days INT DEFAULT 30,
+  updated_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Bug Reports Table
+```sql
+CREATE TABLE bug_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  reported_by UUID REFERENCES users(id),
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  screenshot_key VARCHAR(500),
+  page_url VARCHAR(500),
+  user_agent TEXT,
+  status VARCHAR(20) DEFAULT 'new',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Project Notes Table
+```sql
+CREATE TABLE project_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title VARCHAR(255),
+  content TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
 ---
 
 ## API Specifications
@@ -416,7 +537,7 @@ CREATE TABLE password_reset_tokens (
 
 ### API Endpoints
 
-**Base URL:** `https://api.constructionapp.com/v1` (production)
+**Base URL:** `https://api.taskproof.work/api/v1` (production)
 **Development:** `http://localhost:3000/api/v1`
 
 **Response Format:**
@@ -697,8 +818,8 @@ CREATE TABLE password_reset_tokens (
       {
         "id": "uuid",
         "name": "Ground Floor Plan",
-        "fileUrl": "https://s3.amazonaws.com/...",
-        "thumbnailUrl": "https://s3.amazonaws.com/.../thumb.jpg",
+        "fileUrl": "https://<storage>.blob.core.windows.net/...",
+        "thumbnailUrl": "https://<storage>.blob.core.windows.net/.../thumb.jpg",
         "fileSizeBytes": 2457600,
         "mimeType": "application/pdf",
         "widthPixels": 3000,
@@ -711,7 +832,7 @@ CREATE TABLE password_reset_tokens (
 ```
 
 #### POST /projects/:projectId/blueprints/upload-url
-**Description:** Get presigned S3 URL for blueprint upload
+**Description:** Get presigned URL (SAS URL) for blueprint upload
 **Authentication:** Project Manager, Org Admin
 **Request:**
 ```json
@@ -726,7 +847,7 @@ CREATE TABLE password_reset_tokens (
 {
   "success": true,
   "data": {
-    "uploadUrl": "https://s3.amazonaws.com/...?signature=...",
+    "uploadUrl": "https://<storage>.blob.core.windows.net/...?sig=...",
     "blueprintId": "uuid",
     "expiresAt": "2026-02-11T11:00:00Z"
   }
@@ -901,7 +1022,7 @@ CREATE TABLE password_reset_tokens (
     "id": "uuid",
     "name": "Electrical Punch List - Week 6",
     "status": "completed",
-    "fileUrl": "https://s3.amazonaws.com/.../protocol.pdf",
+    "fileUrl": "https://<storage>.blob.core.windows.net/.../protocol.pdf",
     "fileSizeBytes": 1048576,
     "generatedAt": "2026-02-11T10:45:00Z"
   }
@@ -999,7 +1120,7 @@ CREATE TABLE password_reset_tokens (
       "connected": true,
       "responseTimeMs": 12
     },
-    "s3": {
+    "storage": {
       "connected": true,
       "responseTimeMs": 45
     },
@@ -1035,16 +1156,16 @@ CREATE TABLE password_reset_tokens (
 ### Data Protection
 - All API requests over HTTPS (TLS 1.3)
 - Database connections encrypted
-- S3 files encrypted at rest (AES-256)
-- Presigned URLs expire after 15 minutes
+- Azure Blob Storage files encrypted at rest
+- SAS URLs expire after 15 minutes
 - No sensitive data in logs (passwords, tokens filtered)
 
 ### CORS Configuration
 ```javascript
 {
-  origin: ['https://acme.constructionapp.com', 'https://app.constructionapp.com'],
+  origin: ['https://taskproof.work'],
   credentials: true,
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }
 ```
@@ -1071,8 +1192,8 @@ CREATE TABLE password_reset_tokens (
 **Manifest Configuration:**
 ```json
 {
-  "name": "Construction Manager",
-  "short_name": "CM",
+  "name": "TaskProof",
+  "short_name": "TaskProof",
   "description": "Construction project task management",
   "start_url": "/",
   "display": "standalone",
@@ -1166,7 +1287,7 @@ To mark this task complete, simply reply to this email.
 Questions? Reply to this email to discuss with the project manager.
 
 ---
-Construction Manager | [Organization Name]
+TaskProof | [Organization Name]
 ```
 
 **Task Completed Notification (to project manager):**
@@ -1184,7 +1305,7 @@ Completed: [Date/Time]
 Review and verify: [Link to task]
 
 ---
-Construction Manager | [Organization Name]
+TaskProof | [Organization Name]
 ```
 
 **Password Reset:**
@@ -1201,16 +1322,16 @@ This link expires in 1 hour.
 If you didn't request this, ignore this email.
 
 ---
-Construction Manager
+TaskProof
 ```
 
 **User Invitation:**
 ```
-Subject: You've Been Invited to Construction Manager
+Subject: You've Been Invited to TaskProof
 
 Hello [First Name],
 
-[Admin Name] has invited you to join [Organization Name] on Construction Manager.
+[Admin Name] has invited you to join [Organization Name] on TaskProof.
 
 Click here to set your password and get started:
 [Setup Link]
@@ -1218,12 +1339,12 @@ Click here to set your password and get started:
 Role: [Role]
 
 ---
-Construction Manager
+TaskProof
 ```
 
 ### Email Parsing (Contractor Replies)
 
-**Webhook Endpoint:** POST /webhooks/email-reply (from AWS SES)
+**Webhook Endpoint:** POST /webhooks/email-reply (planned — not yet implemented)
 **Processing Logic:**
 1. Extract sender email from headers
 2. Parse "In-Reply-To" header to identify task ID
@@ -1240,8 +1361,7 @@ Construction Manager
 
 **Frontend Container:**
 ```bash
-REACT_APP_API_URL=https://api.constructionapp.com/v1
-REACT_APP_ENV=production
+VITE_API_URL=/api/v1  # Relative path, proxied by Nginx
 ```
 
 **Backend Container:**
@@ -1255,28 +1375,27 @@ DATABASE_POOL_MIN=2
 DATABASE_POOL_MAX=10
 
 # JWT
-JWT_SECRET=<256-bit-secret-from-secrets-manager>
+JWT_SECRET=<256-bit-secret>
 JWT_EXPIRY=7d
 
-# AWS
-AWS_REGION=eu-north-1
-AWS_S3_BUCKET=construction-manager-files
-AWS_S3_BLUEPRINT_PREFIX=blueprints/
-AWS_S3_PHOTO_PREFIX=photos/
-AWS_S3_PROTOCOL_PREFIX=protocols/
-AWS_SES_SENDER=noreply@constructionapp.com
-AWS_ACCESS_KEY_ID=<from-secrets-manager>
-AWS_SECRET_ACCESS_KEY=<from-secrets-manager>
+# Azure Blob Storage
+AZURE_STORAGE_CONNECTION_STRING=<azure-connection-string>
+AZURE_STORAGE_CONTAINER=uploads
+STORAGE_PROVIDER=azure  # or "local" for development
 
-# Email
-EMAIL_WEBHOOK_SECRET=<for-verifying-ses-webhooks>
+# Email (SMTP)
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASS=<smtp-password>
+EMAIL_FROM=noreply@taskproof.work
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=100
 
-# Monitoring
-SENTRY_DSN=<sentry-project-dsn>
+# Frontend URL (for CORS and email links)
+FRONTEND_URL=https://taskproof.work
 ```
 
 **Database Container:**
@@ -1302,8 +1421,7 @@ services:
     depends_on:
       - backend
     environment:
-      REACT_APP_API_URL: http://localhost:3000/api/v1
-      REACT_APP_ENV: development
+      VITE_API_URL: /api/v1
 
   backend:
     build:
@@ -1317,9 +1435,8 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://construction_admin:devpass@database:5432/construction_manager
       JWT_SECRET: dev-secret-key-change-in-production
-      AWS_REGION: eu-north-1
-      AWS_S3_BUCKET: construction-manager-dev
-      AWS_SES_SENDER: dev@constructionapp.com
+      STORAGE_PROVIDER: local
+      FRONTEND_URL: http://localhost:3001
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -1340,60 +1457,61 @@ volumes:
   postgres_data:
 ```
 
-### Production Deployment (AWS ECS)
+### Production Deployment (Azure VM)
 
-**Task Definition (Backend):**
-```json
-{
-  "family": "construction-manager-backend",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "1024",
-  "memory": "2048",
-  "containerDefinitions": [
-    {
-      "name": "backend",
-      "image": "123456789.dkr.ecr.eu-north-1.amazonaws.com/construction-backend:latest",
-      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
-      "environment": [
-        { "name": "NODE_ENV", "value": "production" },
-        { "name": "PORT", "value": "3000" }
-      ],
-      "secrets": [
-        { "name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:..." },
-        { "name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:..." }
-      ],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/construction-manager",
-          "awslogs-region": "eu-north-1",
-          "awslogs-stream-prefix": "backend"
-        }
-      },
-      "healthCheck": {
-        "command": ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"],
-        "interval": 30,
-        "timeout": 5,
-        "retries": 3
-      }
-    }
-  ]
-}
+**Infrastructure:**
+- Azure VM (Standard B2s or B2ms) running Docker Compose
+- Azure Container Registry (ACR) for storing Docker images
+- Azure Blob Storage for file uploads, blueprints, PDFs, and backups
+- Nginx with Let's Encrypt SSL certificates
+- Custom domains: `taskproof.work` (frontend) + `api.taskproof.work` (backend)
+
+**Deployment Process:**
+1. Build and push Docker images to ACR
+2. SSH into Azure VM
+3. Pull latest images from ACR
+4. Run `docker-compose up -d` with production environment file
+5. Nginx handles SSL termination and reverse proxy
+
+**docker-compose.prod.yml:**
+```yaml
+version: '3.9'
+
+services:
+  frontend:
+    image: <acr-name>.azurecr.io/taskproof-frontend:latest
+    restart: always
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - backend
+    volumes:
+      - ./ssl:/etc/nginx/ssl
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+
+  backend:
+    image: <acr-name>.azurecr.io/taskproof-backend:latest
+    restart: always
+    env_file: .env.production
+    depends_on:
+      - database
+
+  database:
+    image: postgres:16-alpine
+    restart: always
+    env_file: .env.production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
 ```
 
-**Application Load Balancer:**
-- Target Group: Health check on `/health` endpoint
-- SSL Certificate: AWS ACM (auto-renewal)
-- Security Group: Allow 443 from 0.0.0.0/0, allow 3000 from frontend SG
-
-**RDS Configuration (Production Phase 2):**
-- Engine: PostgreSQL 16
-- Instance: db.t4g.medium (2 vCPU, 4 GB RAM)
-- Multi-AZ: Yes (high availability)
-- Storage: 100 GB gp3 with auto-scaling to 500 GB
-- Backup: Daily automated backups, 7-day retention
-- Encryption: At rest with KMS
+**SSL Configuration:**
+- Let's Encrypt certificates via certbot
+- Auto-renewal via cron job
+- Nginx configured for TLS 1.2+ with strong ciphers
 
 ### CI/CD Pipeline
 
@@ -1420,35 +1538,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Login to ACR
+        uses: azure/docker-login@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-north-1
-      - name: Login to ECR
-        run: aws ecr get-login-password | docker login --username AWS --password-stdin 123456789.dkr.ecr.eu-north-1.amazonaws.com
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
       - name: Build and push backend
         run: |
           cd backend
-          docker build -t construction-backend .
-          docker tag construction-backend:latest 123456789.dkr.ecr.eu-north-1.amazonaws.com/construction-backend:latest
-          docker push 123456789.dkr.ecr.eu-north-1.amazonaws.com/construction-backend:latest
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/taskproof-backend:latest .
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/taskproof-backend:latest
       - name: Build and push frontend
         run: |
           cd frontend
-          docker build -t construction-frontend .
-          docker tag construction-frontend:latest 123456789.dkr.ecr.eu-north-1.amazonaws.com/construction-frontend:latest
-          docker push 123456789.dkr.ecr.eu-north-1.amazonaws.com/construction-frontend:latest
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/taskproof-frontend:latest .
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/taskproof-frontend:latest
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Update ECS service
-        run: |
-          aws ecs update-service --cluster construction-cluster --service backend-service --force-new-deployment
-          aws ecs update-service --cluster construction-cluster --service frontend-service --force-new-deployment
+      - name: Deploy to Azure VM
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd /app
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ---
@@ -1738,20 +1858,19 @@ npm run migrate create add_column_name
 - Blueprint thumbnails: 300x400px for list views
 - Photo compression: JPEG quality 85
 - Database connection pooling: min 2, max 10 per backend instance
-- S3 lifecycle: Move protocols >90 days to Glacier
+- Azure Blob Storage lifecycle: Configurable retention for backups (default 30 days)
 
 ---
 
 ## Monitoring & Observability
 
-### Application Metrics (CloudWatch)
+### Application Metrics
 - Request rate (requests/minute)
 - Error rate (errors/minute)
 - Response time (p50, p95, p99)
-- Active WebSocket connections
 - Queue depth (offline sync queue)
 
-### Business Metrics (Custom Dashboard)
+### Business Metrics (Admin Dashboard)
 - Daily Active Users (DAU)
 - Tasks created per day
 - Tasks completed per day
@@ -1840,7 +1959,7 @@ npm run migrate create add_column_name
 
 ## Timeline Considerations
 
-### Phase 1: MVP (Months 1-4)
+### Phase 1: MVP (Completed)
 **Deliverables:**
 - User authentication and role-based access
 - Project and task CRUD operations
@@ -1850,46 +1969,55 @@ npm run migrate create add_column_name
 - Basic protocol generation (PDF with task list)
 - Admin dashboard with usage statistics
 - Responsive web UI (mobile-optimized)
-- Single-tenant deployment on AWS
+- Deployed to Azure VM with Docker Compose
 
-**Dependencies:**
-- AWS account setup and infrastructure provisioning (Week 1)
-- Design mockups approval (Week 2)
-- Database schema finalization (Week 2)
-
-### Phase 2: Enhancement (Months 5-6)
+### Phase 2: Enhancement (Completed)
 **Deliverables:**
-- Offline PWA capabilities with sync
-- Advanced filtering and search
-- Email reply parsing for status updates
-- Protocol customization (grouping, sorting, branding)
-- User activity reports
-- RDS Multi-AZ for high availability
-- Performance optimization
+- Product catalog with Excel import/export
+- Custom fields system with visual form builder
+- Task numbering and blueprint annotations (redlining)
+- Multiple draggable markers on blueprints
+- Protocol PDF signing with public access tokens
+- Blueprint PDF embedding in protocol reports
+- Project notes feature
+- User profile management (name, email, password)
+- My Tasks page and admin task report
+- Database backup system (manual + scheduled, full + selective restore)
+- Bug reporter with admin management page
+- Inline task editing
+- Organization logo upload with branding
+- SSL and custom domains (taskproof.work)
+- Bulk user import from Excel
 
-### Phase 3: Scale (Months 7-9)
+### Phase 3: Scale (Future)
 **Deliverables:**
+- PWA offline capabilities with sync
+- Contractor email reply parsing
 - Multi-tenant architecture migration
 - SSO (SAML/OAuth) integration
-- Mobile-specific optimizations
 - Advanced analytics dashboard
 - API for third-party integrations
-- Automated testing suite expansion
+- Performance optimization and load testing
+
+**Dependencies:**
+- Single-tenant deployment on Azure (Week 1) ✅
+- Design mockups approval (Week 2) ✅
+- Database schema finalization (Week 2) ✅
 
 ### Hard Deadlines
 - **None specified** - MVP launch when feature-complete and stable
 
 ### Phasing Considerations
-- MVP must be fully functional for 50-user pilot
-- Phase 2 deferred until pilot feedback collected
-- Phase 3 only if multi-tenant demand validated
+- MVP and Phase 2 are complete and in production
+- Phase 3 deferred until user feedback and demand validated
+- Offline PWA support is the highest-priority Phase 3 item for field users
 
 ---
 
 ## Appendix: Implementation Status
 
-**Last Updated:** 2026-02-11
-**Overall Status:** MVP Core Complete — all primary features implemented and functional in local Docker environment.
+**Last Updated:** 2026-02-15
+**Overall Status:** Production — deployed and live at https://taskproof.work. All MVP features plus significant post-MVP enhancements implemented.
 
 ### Completed Phases
 
@@ -1898,7 +2026,7 @@ npm run migrate create add_column_name
 | 1 | Foundation & Infrastructure | Done |
 | 2 | Authentication System | Done |
 | 3 | Core Domain (Projects, Tasks, Comments) | Done |
-| 4 | File Handling (S3, Blueprints, Photos, Thumbnails) | Done |
+| 4 | File Handling (Azure Blob Storage, Blueprints, Photos, Thumbnails) | Done |
 | 5 | Email & Protocol PDF Generation | Done |
 | 6 | Frontend Auth & App Shell | Done |
 | 7 | Frontend Core Pages (Projects, Tasks, Comments, Users) | Done |
@@ -1906,27 +2034,103 @@ npm run migrate create add_column_name
 | 9 | Admin Dashboard, Protocol UI & Polish | Done |
 | 10 | MinIO Presigned URL Fix (dev environment) | Done |
 | 11 | Local Filesystem Storage Provider | Done |
+| 12 | User Profile & Password Management | Done |
+| 13 | Product Catalog & Task-Product Linking | Done |
+| 14 | Task Numbering & Blueprint Annotation (Redlining) | Done |
+| 15 | Custom Fields System (Visual Form Builder) | Done |
+| 16 | User Card Management & Inline Protocol Report | Done |
+| 17 | Task Sorting & Blueprint Protection | Done |
+| 18 | My Tasks Page, Admin Task Report, Contractor Assignment | Done |
+| 19 | Protocol PDF Signing (Token-based Public Access) | Done |
+| 20 | Project Notes & Blueprint PDF Embedding in Protocols | Done |
+| 21 | Migration to Azure & Database Backup System | Done |
+| 22 | SSL & Custom Domains (taskproof.work) | Done |
+| 23 | Bug Reporter Library & Admin Bug Reports Page | Done |
+| 24 | Product Excel Import/Export & Blueprint Delete Confirmation | Done |
+| 25 | Inline Task Editing (Title, Description, Priority, Trade) | Done |
+| 26 | Multiple Draggable Markers for Blueprint Annotations | Done |
+| 27 | Bulk User Import from Excel | Done |
+| 28 | Selective Backup Restore (Full or Per-Table) | Done |
 
 ### Architecture Summary
 
-- **Backend:** Express.js/TypeScript with 11 route modules, JWT auth (HttpOnly cookies), bcrypt, Zod validation, Pino logging, Helmet security headers, rate limiting
-- **Frontend:** React 18/TypeScript with Vite, Tailwind CSS, React Query, Zustand, React Router v7
-- **Database:** PostgreSQL 16 with 10 tables, triggers, indexes, full seed data script
-- **Storage:** Dual-mode storage provider (local filesystem for dev, S3/MinIO for production) — switchable via `STORAGE_PROVIDER` env var
-- **Email:** Nodemailer with Mailhog (dev) / SES (prod), 4 HTML+text email templates
-- **PDF:** PDFKit-based protocol generation with trade-grouped task tables
+- **Backend:** Express.js/TypeScript with 15+ route modules, JWT auth (HttpOnly cookies), bcrypt, Zod validation, Pino logging, Helmet security headers, rate limiting, node-cron for scheduled backups
+- **Frontend:** React 18/TypeScript with Vite, Tailwind CSS, React Query, Zustand, React Router v7, pdfjs-dist for PDF rendering
+- **Database:** PostgreSQL 16 with 18+ tables, triggers, indexes, node-pg-migrate migrations
+- **Storage:** Dual-mode storage provider (local filesystem for dev, Azure Blob Storage for production) — switchable via `STORAGE_PROVIDER` env var
+- **Email:** Nodemailer with Mailhog (dev) / SMTP (prod), HTML+text email templates
+- **PDF:** PDFKit-based protocol generation with trade-grouped task tables, blueprint embedding, signing support
 - **Testing:** 123 backend tests across 11 suites (Jest + Supertest), all passing
+- **Deployment:** Azure VM with Docker Compose, ACR, SSL via Let's Encrypt
+
+### Post-MVP Features Implemented
+
+**User Profile Page:**
+- Users can edit their own first name, last name, and email
+- Password change with current password verification
+
+**Product Catalog:**
+- Full CRUD for products (article number, name, description, unit, price, category)
+- Link products to tasks with quantity tracking
+- Excel import/export for bulk product management
+- Template download for standardized imports
+
+**Task Numbering & Annotations:**
+- Auto-incrementing task numbers per project (e.g., #001, #002)
+- Blueprint annotation/redlining: tasks store annotation coordinates (x, y, width, height, page)
+- Multiple draggable markers on blueprints for precise positioning
+
+**Custom Fields System:**
+- Visual Google Forms-style form builder for organization admins
+- Field types: text, number, select, multi-select, date, checkbox
+- Fields attached to tasks with per-task values
+- Drag-and-drop ordering of fields
+
+**Protocol Enhancements:**
+- Blueprint PDF pages embedded in protocol reports
+- Protocol PDF signing with token-based public access URLs
+- Inline protocol report view with PDF export (dom-to-image-more)
+
+**Project Notes:**
+- Rich text notes per project
+- Notes displayed on project detail page
+
+**Admin Features:**
+- My Tasks page: filterable personal task dashboard
+- Admin task report: organization-wide task statistics
+- User card management
+- Bug reporter: in-app bug reporting with screenshot capture
+- Bug reports admin page with status management
+- Bulk user import from Excel with template download
+
+**Database Backup System:**
+- Manual and scheduled (cron-based) database backups
+- Backups stored in Azure Blob Storage
+- Configurable retention period (auto-cleanup of expired backups)
+- Full restore or selective per-table restore
+- Download backup archives
+- Backup settings with schedule configuration
+
+**Organization Branding:**
+- Logo upload with thumbnail generation (Azure Blob Storage image upload, not URL field)
+- Logo displayed in protocols and app header
+
+**Infrastructure:**
+- Migrated from AWS to Azure (VM + Blob Storage + ACR)
+- SSL certificates via Let's Encrypt
+- Custom domains: taskproof.work + api.taskproof.work
+- App rebranded as TaskProof
 
 ### Key Implementation Details
 
-**Local Storage Provider (Phase 11):**
-The development environment stores files on the backend's local filesystem instead of requiring MinIO/S3. The frontend is unchanged — it receives presigned URLs pointing to the backend itself:
+**Local Storage Provider:**
+The development environment stores files on the backend's local filesystem instead of requiring Azure Blob Storage. The frontend is unchanged — it receives presigned URLs pointing to the backend itself:
 - Upload: JWT-signed token in URL → `PUT /api/v1/storage/upload/{token}` → saves to `./uploads/`
 - Download: Base64url-encoded key → `GET /api/v1/storage/files/{key}` → serves from `./uploads/`
-- Switch to S3/MinIO: set `STORAGE_PROVIDER=s3` and use `docker-compose --profile s3 up`
+- Switch to Azure Blob: set `STORAGE_PROVIDER=azure` and configure `AZURE_STORAGE_CONNECTION_STRING`
 
 **Blueprint PDF Support:**
-Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the viewer. Image blueprints support zoom/pan/markers.
+Blueprints can be JPG, PNG, or PDF. PDF blueprints render via pdfjs-dist in the viewer. Image blueprints support zoom/pan/markers. The Nginx Dockerfile patches `.mjs` MIME types to support pdfjs-dist worker files.
 
 **Seed Data (all passwords: `Password123!`):**
 
@@ -1938,18 +2142,18 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 | field@demo.com | field_user |
 | field2@demo.com | field_user |
 
-### Deferred to Post-MVP
+### Deferred to Future
 
 - PWA manifest and service worker (offline support)
 - IndexedDB offline task queue
-- Contractor email reply parsing (SES webhook)
+- Contractor email reply parsing (webhook)
 - SSO (SAML/OAuth)
 - WebSocket real-time updates
 - Sentry error tracking
 - Playwright E2E tests
 - Load testing
 - Accessibility audit
-- AWS production infrastructure (ECR, ECS, ALB, S3, SES, CloudWatch)
+- Multi-tenant architecture migration
 
 ---
 
@@ -1970,10 +2174,10 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 - [x] Build task comment endpoints
 - [x] Build protocol generation service (PDF library)
 - [x] Build admin statistics endpoints
-- [x] Configure AWS S3 SDK for file operations
-- [x] Configure AWS SES SDK for email sending (Mailhog for dev)
+- [x] Configure Azure Blob Storage SDK for file operations
+- [x] Configure SMTP email sending (Mailhog for dev)
 - [x] Implement email templates (task assignment, password reset)
-- [ ] Create email webhook endpoint for contractor replies (deferred to post-MVP)
+- [ ] Create email webhook endpoint for contractor replies (deferred)
 - [x] Add rate limiting middleware
 - [x] Add request logging middleware
 - [x] Add error handling middleware
@@ -1982,9 +2186,16 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 - [x] Write unit tests for authorization checks
 - [x] Write unit tests for task business logic
 - [x] Write integration tests for API endpoints
-- [ ] Configure Sentry error tracking (deferred to post-MVP)
+- [ ] Configure Sentry error tracking (deferred)
 - [x] Create Dockerfile for backend
-- [ ] Document API endpoints in README
+- [x] Build product catalog endpoints (CRUD, Excel import/export)
+- [x] Build custom fields endpoints (form builder, values)
+- [x] Build backup system (create, restore, schedule, download)
+- [x] Build bug reports endpoints
+- [x] Build project notes endpoints
+- [x] Build protocol signing with public access tokens
+- [x] Build user profile update and password change endpoints
+- [x] Build bulk user import from Excel
 
 ### Frontend Implementation
 - [x] Initialize React TypeScript project with Vite
@@ -2005,8 +2216,8 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 - [x] Build blueprint viewer component (zoom, pan, markers)
 - [x] Build protocol generator interface
 - [x] Build admin dashboard with statistics
-- [ ] Implement PWA manifest and service worker (deferred to post-MVP)
-- [ ] Implement offline task queue with IndexedDB (deferred to post-MVP)
+- [ ] Implement PWA manifest and service worker (deferred)
+- [ ] Implement offline task queue with IndexedDB (deferred)
 - [x] Add loading states and error handling
 - [x] Add form validation
 - [ ] Write component tests
@@ -2015,30 +2226,43 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 - [ ] Add accessibility attributes (ARIA labels)
 - [x] Create Dockerfile for frontend (Nginx)
 - [x] Test responsive design on mobile devices
+- [x] Build user profile page (name/email editing, password change)
+- [x] Build product catalog page (CRUD, Excel import/export)
+- [x] Build custom fields form builder (drag-drop, visual editor)
+- [x] Build My Tasks page (personal task dashboard)
+- [x] Build admin task report page
+- [x] Build backup management page (create, restore, schedule, settings)
+- [x] Build bug reporter component (in-app reporting with screenshots)
+- [x] Build bug reports admin page
+- [x] Build project notes interface
+- [x] Build inline task editing (title, description, priority, trade)
+- [x] Build multiple draggable blueprint markers
+- [x] Build protocol signing and public access view
+- [x] Build selective backup restore (full vs per-table)
 
 ### Database Implementation
 - [x] Write initial migration (001_initial_schema.sql)
 - [x] Add database triggers for updated_at columns
 - [x] Create indexes for common queries
-- [ ] Set up automated backup script
-- [ ] Document database schema in README
+- [x] Set up automated backup system (manual + scheduled, stored in Azure Blob Storage)
 - [x] Create seed data script for development
+- [x] Implement selective backup restore (full or per-table)
+- [x] Add migrations for products, custom fields, backups, bug reports, project notes tables
 - [ ] Test migration rollback procedures
 
 ### DevOps Implementation
-- [ ] Create AWS account and configure credentials
-- [ ] Set up ECR repositories (frontend, backend)
-- [ ] Create S3 bucket with encryption and lifecycle policies
-- [ ] Configure SES for email sending (verify domain)
-- [ ] Create Secrets Manager entries for sensitive values
+- [x] Create Azure account and configure credentials
+- [x] Set up Azure Container Registry (ACR)
+- [x] Create Azure Blob Storage container with encryption
+- [x] Configure SMTP for email sending
 - [x] Write docker-compose.yml for local development
-- [ ] Write ECS task definitions (frontend, backend)
-- [ ] Create Application Load Balancer with SSL
-- [ ] Configure CloudWatch log groups
-- [ ] Set up CloudWatch alarms for critical metrics
+- [x] Write docker-compose.prod.yml for Azure VM deployment
+- [x] Configure SSL certificates (Let's Encrypt) for taskproof.work and api.taskproof.work
+- [x] Set up Nginx reverse proxy with SSL termination
 - [x] Create GitHub Actions CI/CD workflow
-- [ ] Document deployment process in README
-- [ ] Test disaster recovery procedures (backup restore)
+- [x] Test disaster recovery procedures (backup and restore)
+- [ ] Set up monitoring/alerting for critical metrics
+- [ ] Document deployment process
 
 ### Testing & Quality Assurance
 - [x] Manual test: User registration and login
@@ -2063,17 +2287,18 @@ Blueprints can be JPG, PNG, or PDF. PDF blueprints render via iframe in the view
 
 This specification provides a complete blueprint for building a modern, cloud-native construction management platform. The architecture prioritizes simplicity for MVP launch while maintaining flexibility for future enhancements. Key design decisions include single-tenant deployment for customer isolation, PostgreSQL for reliability, and Progressive Web App approach for cross-platform compatibility without native app complexity.
 
-**Current Status:** MVP core implementation is complete. All backend and frontend features are functional in the local Docker development environment. The platform supports user authentication, project/task CRUD, blueprint viewing with markers, photo uploads, email notifications, PDF protocol generation, and admin dashboard.
+**Current Status:** Production — live at https://taskproof.work. The platform is fully deployed on Azure infrastructure with SSL, custom domains, and automated database backups. All MVP features plus significant post-MVP enhancements are implemented, including product catalog, custom fields, protocol signing, bug reporting, Excel import/export, selective backup restore, and multiple blueprint annotation markers.
 
 **Next Steps:**
-1. User acceptance testing with pilot users
-2. Provision AWS production infrastructure (S3, SES, ECS, ALB)
-3. Deploy to production environment
-4. Implement post-MVP features based on pilot feedback (PWA offline support, contractor email parsing, SSO)
+1. Gather user feedback from production usage
+2. Implement PWA offline support based on field user needs
+3. Add contractor email reply parsing for automated status updates
+4. Evaluate SSO integration for enterprise customers
+5. Performance optimization and load testing
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2026-02-11
+**Document Version:** 2.0
+**Last Updated:** 2026-02-15
 **Prepared By:** J.A.R.V.I.S. Technical Specification System
 **Prepared For:** Claude Code Implementation Team

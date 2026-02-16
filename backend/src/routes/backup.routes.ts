@@ -126,6 +126,27 @@ router.get('/:backupId', async (req: Request, res: Response, next: NextFunction)
   }
 });
 
+// GET /:backupId/tables — list tables in backup archive
+router.get(
+  '/:backupId/tables',
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tables = await backupService.listBackupTables(
+        param(req.params.backupId),
+        req.user!.organizationId,
+      );
+      sendSuccess(res, { tables });
+    } catch (err: any) {
+      if (err.statusCode === 404) {
+        sendError(res, 404, 'NOT_FOUND', err.message);
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
 // GET /:backupId/download
 router.get('/:backupId/download', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -170,10 +191,10 @@ router.delete('/:backupId', async (req: Request, res: Response, next: NextFuncti
   }
 });
 
-// POST /:backupId/restore — super_admin only
+// POST /:backupId/restore
 router.post(
   '/:backupId/restore',
-  authorize(UserRole.SUPER_ADMIN),
+  authorize(UserRole.SUPER_ADMIN, UserRole.ORG_ADMIN),
   validate(restoreBackupSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -182,6 +203,7 @@ router.post(
         req.user!.organizationId,
         req.user!.userId,
         req.ip as string || '',
+        req.body.tables,
       );
       sendSuccess(res, { message: 'Database restored successfully' });
     } catch (err: any) {

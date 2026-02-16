@@ -14,4 +14,7 @@ export const restoreBackupSchema = z.object({
   confirmRestore: z.literal(true, {
     error: 'You must confirm the restore operation',
   }),
+  tables: z.array(
+    z.string().min(1).max(128).regex(/^[a-z_][a-z0-9_]*$/, 'Invalid table name'),
+  ).optional(),
 });

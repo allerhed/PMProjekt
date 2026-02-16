@@ -16,6 +16,9 @@ import {
 import { createResetToken, findValidResetToken, markTokenUsed } from '../models/passwordResetToken.model';
 import { UserRole } from '../types';
 import { logger } from '../utils/logger';
+import { sendEmail } from './email.service';
+import { renderPasswordReset } from './emailTemplate.service';
+import config from '../config';
 import { RegisterInput, LoginInput } from '../validators/auth.validators';
 
 const MAX_FAILED_ATTEMPTS = 5;
@@ -155,8 +158,11 @@ export async function forgotPassword(email: string): Promise<void> {
   const { token, tokenHash } = generateResetToken();
   await createResetToken(user.id, tokenHash);
 
-  // TODO: Send email with reset link (Phase 5)
-  logger.info({ userId: user.id, token }, 'Password reset token generated (dev: token logged)');
+  const resetUrl = `${config.frontendUrl}/reset-password?token=${token}`;
+  const resetEmail = renderPasswordReset({ firstName: user.first_name, resetUrl });
+  sendEmail({ to: user.email, ...resetEmail });
+
+  logger.info({ userId: user.id }, 'Password reset email sent');
 }
 
 export async function resetPassword(tokenRaw: string, newPassword: string): Promise<void> {

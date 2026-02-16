@@ -33,6 +33,8 @@ const config = {
     },
   },
 
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+
   email: {
     sender: process.env.EMAIL_SENDER || 'dev@constructionapp.com',
     webhookSecret: process.env.EMAIL_WEBHOOK_SECRET || 'dev-webhook-secret',

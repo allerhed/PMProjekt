@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUsers, useCreateUser, useUpdateUser } from '../../hooks/useUsers';
 import { useCustomFieldDefinitions } from '../../hooks/useCustomFields';
+import { userApi } from '../../services/user.api';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
@@ -330,7 +332,11 @@ export default function UserManagementPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const updateUser = useUpdateUser();
+  const queryClient = useQueryClient();
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created?: number; errors?: { row: number; messages: string[] }[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const users = data?.data?.users || [];
 
@@ -346,11 +352,47 @@ export default function UserManagementPage() {
     }
   }
 
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    try {
+      const result = await userApi.importUsers(file);
+      setImportResult({ created: result.created });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      const errors = err?.response?.data?.error?.details?.errors;
+      if (errors) {
+        setImportResult({ errors });
+      } else {
+        setImportResult({ errors: [{ row: 0, messages: ['Failed to import file. Make sure it is a valid .xlsx file.'] }] });
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-        <Button onClick={() => setShowInvite(true)}>Invite User</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => userApi.downloadTemplate()}>
+            Template
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => importInputRef.current?.click()} loading={importing}>
+            Import
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <Button onClick={() => setShowInvite(true)}>Invite User</Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -385,6 +427,46 @@ export default function UserManagementPage() {
           user={editingUser}
         />
       )}
+
+      {/* Import Result Modal */}
+      <Modal isOpen={!!importResult} onClose={() => setImportResult(null)} title={importResult?.created ? 'Import Successful' : 'Import Errors'} size="md">
+        {importResult?.created ? (
+          <div className="text-center py-4">
+            <div className="text-green-600 text-4xl font-bold mb-2">{importResult.created}</div>
+            <p className="text-sm text-gray-600">users imported successfully</p>
+            <div className="flex justify-end mt-6">
+              <Button onClick={() => setImportResult(null)}>Close</Button>
+            </div>
+          </div>
+        ) : importResult?.errors ? (
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              Fix the following errors in your spreadsheet and try again:
+            </p>
+            <div className="max-h-64 overflow-y-auto border rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Row</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Errors</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {importResult.errors.map((err, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{err.row || '-'}</td>
+                      <td className="px-3 py-2 text-red-600">{err.messages.join('; ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end mt-4">
+              <Button variant="secondary" onClick={() => setImportResult(null)}>Close</Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

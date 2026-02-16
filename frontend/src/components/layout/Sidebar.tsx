@@ -16,11 +16,11 @@ const navItems = [
 ];
 
 const adminItems = [
-  { to: '/products', label: 'Products', icon: PackageIcon },
-  { to: '/admin/form-builder', label: 'Form Builder', icon: FormIcon },
-  { to: '/admin/users', label: 'Users', icon: UsersIcon },
   { to: '/admin/dashboard', label: 'Dashboard', icon: ChartIcon },
   { to: '/admin/task-report', label: 'Task Report', icon: ReportIcon },
+  { to: '/products', label: 'Products', icon: PackageIcon },
+  { to: '/admin/users', label: 'Users', icon: UsersIcon },
+  { to: '/admin/form-builder', label: 'Form Builder', icon: FormIcon },
   { to: '/admin/backups', label: 'Backups', icon: DatabaseIcon },
   { to: '/admin/bug-reports', label: 'Bug Reports', icon: BeetleIcon },
   { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },
@@ -53,7 +53,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <nav aria-label="Main navigation" className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}

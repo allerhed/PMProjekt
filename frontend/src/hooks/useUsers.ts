@@ -29,3 +29,13 @@ export function useUpdateUser() {
     },
   });
 }
+
+export function useImportUsers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => userApi.importUsers(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}

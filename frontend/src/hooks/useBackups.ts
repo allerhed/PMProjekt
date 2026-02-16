@@ -37,10 +37,19 @@ export function useDeleteBackup() {
 export function useRestoreBackup() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (backupId: string) => backupApi.restoreBackup(backupId),
+    mutationFn: ({ backupId, tables }: { backupId: string; tables?: string[] }) =>
+      backupApi.restoreBackup(backupId, tables),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] });
     },
+  });
+}
+
+export function useBackupTables(backupId: string | null) {
+  return useQuery({
+    queryKey: ['backupTables', backupId],
+    queryFn: () => backupApi.listBackupTables(backupId!),
+    enabled: !!backupId,
   });
 }
 

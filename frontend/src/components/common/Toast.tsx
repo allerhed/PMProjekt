@@ -33,6 +33,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: (id: number) => 
 
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
       className={clsx(
         'flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white text-sm min-w-[280px] max-w-[400px] transition-all duration-300 ease-in-out',
         {
@@ -88,7 +89,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-live="polite">
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onClose={removeToast} />
         ))}

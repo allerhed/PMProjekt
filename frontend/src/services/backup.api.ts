@@ -48,8 +48,13 @@ export const backupApi = {
     await api.delete(`/admin/backups/${backupId}`);
   },
 
-  async restoreBackup(backupId: string): Promise<void> {
-    await api.post(`/admin/backups/${backupId}/restore`, { confirmRestore: true });
+  async restoreBackup(backupId: string, tables?: string[]): Promise<void> {
+    await api.post(`/admin/backups/${backupId}/restore`, { confirmRestore: true, ...(tables ? { tables } : {}) });
+  },
+
+  async listBackupTables(backupId: string): Promise<string[]> {
+    const res = await api.get(`/admin/backups/${backupId}/tables`);
+    return res.data.data.tables;
   },
 
   async getSettings(): Promise<BackupSettings> {

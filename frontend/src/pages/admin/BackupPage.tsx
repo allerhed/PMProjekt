@@ -7,11 +7,10 @@ import {
   useRestoreBackup,
   useBackupSettings,
   useUpdateBackupSettings,
+  useBackupTables,
 } from '../../hooks/useBackups';
 import { backupApi } from '../../services/backup.api';
 import type { Backup } from '../../services/backup.api';
-import { useAuthStore } from '../../stores/authStore';
-import { UserRole } from '../../types';
 import Card, { CardBody, CardHeader } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
@@ -59,9 +58,6 @@ function formatCronExpression(cron: string): string {
 }
 
 export default function BackupPage() {
-  const user = useAuthStore((s) => s.user);
-  const isSuperAdmin = user?.role === UserRole.SUPER_ADMIN;
-
   const { data: backups, isLoading: backupsLoading } = useBackups();
   const { data: settings, isLoading: settingsLoading } = useBackupSettings();
   const createBackup = useCreateBackup();
@@ -73,10 +69,16 @@ export default function BackupPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState<string | null>(null);
   const [restoreInput, setRestoreInput] = useState('');
+  const [restoreStep, setRestoreStep] = useState<1 | 2>(1);
+  const [restoreMode, setRestoreMode] = useState<'full' | 'selective'>('full');
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [scheduleEnabled, setScheduleEnabled] = useState<boolean | null>(null);
   const [scheduleCron, setScheduleCron] = useState('');
   const [retentionDays, setRetentionDays] = useState('');
 
+  const { data: backupTables, isLoading: tablesLoading } = useBackupTables(
+    restoreMode === 'selective' ? showRestoreConfirm : null,
+  );
   const effectiveEnabled = scheduleEnabled ?? settings?.schedule_enabled ?? false;
   const effectiveCron = scheduleCron || settings?.schedule_cron || '0 3 * * *';
   const effectiveRetention = retentionDays || String(settings?.retention_days ?? 30);
@@ -108,12 +110,50 @@ export default function BackupPage() {
   }
 
   function handleRestore(backupId: string) {
-    restoreBackup.mutate(backupId, {
+    const tables = restoreMode === 'selective' ? Array.from(selectedTables) : undefined;
+    restoreBackup.mutate({ backupId, tables }, {
       onSuccess: () => {
         setShowRestoreConfirm(null);
         setRestoreInput('');
+        setRestoreStep(1);
+        setRestoreMode('full');
+        setSelectedTables(new Set());
       },
     });
+  }
+
+  function openRestoreModal(backupId: string) {
+    setShowRestoreConfirm(backupId);
+    setRestoreStep(1);
+    setRestoreMode('full');
+    setSelectedTables(new Set());
+    setRestoreInput('');
+  }
+
+  function closeRestoreModal() {
+    setShowRestoreConfirm(null);
+    setRestoreInput('');
+    setRestoreStep(1);
+    setRestoreMode('full');
+    setSelectedTables(new Set());
+  }
+
+  function toggleTable(table: string) {
+    setSelectedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(table)) next.delete(table);
+      else next.add(table);
+      return next;
+    });
+  }
+
+  function toggleAllTables() {
+    if (!backupTables) return;
+    if (selectedTables.size === backupTables.length) {
+      setSelectedTables(new Set());
+    } else {
+      setSelectedTables(new Set(backupTables));
+    }
   }
 
   function handleSaveSettings() {
@@ -304,14 +344,12 @@ export default function BackupPage() {
                               >
                                 Download
                               </button>
-                              {isSuperAdmin && (
-                                <button
-                                  onClick={() => setShowRestoreConfirm(backup.id)}
-                                  className="text-yellow-600 hover:text-yellow-800 font-medium"
-                                >
-                                  Restore
-                                </button>
-                              )}
+                              <button
+                                onClick={() => openRestoreModal(backup.id)}
+                                className="text-yellow-600 hover:text-yellow-800 font-medium"
+                              >
+                                Restore
+                              </button>
                             </>
                           )}
                           {backup.status !== 'in_progress' && (
@@ -360,42 +398,149 @@ export default function BackupPage() {
         </div>
       )}
 
-      {/* Restore Confirmation Modal */}
+      {/* Restore Modal — Two-Step */}
       {showRestoreConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Restore Database</h3>
-            <p className="text-sm text-gray-600 mb-2">
-              This will replace the current database with the backup. All data created after this backup will be lost.
-            </p>
-            <p className="text-sm font-medium text-gray-900 mb-3">
-              Type <span className="font-mono text-red-600">RESTORE</span> to confirm.
-            </p>
-            <input
-              type="text"
-              value={restoreInput}
-              onChange={(e) => setRestoreInput(e.target.value)}
-              placeholder="Type RESTORE"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-4 focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowRestoreConfirm(null);
-                  setRestoreInput('');
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRestore(showRestoreConfirm)}
-                disabled={restoreInput !== 'RESTORE' || restoreBackup.isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
-              >
-                {restoreBackup.isPending ? 'Restoring...' : 'Restore Database'}
-              </button>
-            </div>
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+            {restoreStep === 1 ? (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Restore Database</h3>
+
+                <div className="space-y-3 mb-4">
+                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="restoreMode"
+                      checked={restoreMode === 'full'}
+                      onChange={() => setRestoreMode('full')}
+                      className="text-primary-600 focus:ring-primary-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Full Restore</p>
+                      <p className="text-xs text-gray-500">Replace the entire database with this backup</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="restoreMode"
+                      checked={restoreMode === 'selective'}
+                      onChange={() => setRestoreMode('selective')}
+                      className="text-primary-600 focus:ring-primary-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Selective Restore</p>
+                      <p className="text-xs text-gray-500">Choose specific tables to restore</p>
+                    </div>
+                  </label>
+                </div>
+
+                {restoreMode === 'selective' && (
+                  <div className="mb-4">
+                    {tablesLoading ? (
+                      <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+                    ) : backupTables && backupTables.length > 0 ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-medium text-gray-700">
+                            Select tables ({selectedTables.size} of {backupTables.length})
+                          </p>
+                          <button
+                            type="button"
+                            onClick={toggleAllTables}
+                            className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                          >
+                            {selectedTables.size === backupTables.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-1">
+                          {backupTables.map((table) => (
+                            <label key={table} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedTables.has(table)}
+                                onChange={() => toggleTable(table)}
+                                className="rounded text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-gray-700 font-mono">{table}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 py-2">No tables found in backup.</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={closeRestoreModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setRestoreStep(2)}
+                    disabled={restoreMode === 'selective' && selectedTables.size === 0}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Restore</h3>
+
+                {restoreMode === 'full' ? (
+                  <p className="text-sm text-gray-600 mb-2">
+                    This will replace the <span className="font-semibold">entire database</span> with the backup. All data created after this backup will be lost.
+                  </p>
+                ) : (
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Restoring <span className="font-semibold">{selectedTables.size} table{selectedTables.size !== 1 ? 's' : ''}</span> from the backup:
+                    </p>
+                    <div className="max-h-24 overflow-y-auto bg-gray-50 rounded-lg p-2 mb-2">
+                      <p className="text-xs font-mono text-gray-700">
+                        {Array.from(selectedTables).sort().join(', ')}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Data in these tables will be replaced with the backup version.
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-sm font-medium text-gray-900 mb-3">
+                  Type <span className="font-mono text-red-600">RESTORE</span> to confirm.
+                </p>
+                <input
+                  type="text"
+                  value={restoreInput}
+                  onChange={(e) => setRestoreInput(e.target.value)}
+                  placeholder="Type RESTORE"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-4 focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+                <div className="flex justify-between">
+                  <button
+                    onClick={() => { setRestoreStep(1); setRestoreInput(''); }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => handleRestore(showRestoreConfirm)}
+                    disabled={restoreInput !== 'RESTORE' || restoreBackup.isPending}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {restoreBackup.isPending ? 'Restoring...' : 'Restore Database'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

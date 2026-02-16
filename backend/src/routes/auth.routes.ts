@@ -11,6 +11,7 @@ import {
   resetPasswordSchema,
 } from '../validators/auth.validators';
 import * as authService from '../services/auth.service';
+import { logAuditAction } from '../services/audit.service';
 
 const router = Router();
 
@@ -36,6 +37,14 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response,
   try {
     const result = await authService.login(req.body);
     setAuthCookie(res, result.token);
+
+    logAuditAction({
+      organizationId: result.user.organization_id,
+      userId: result.user.id,
+      action: 'user.login',
+      ipAddress: (req.ip as string || ''),
+    });
+
     sendSuccess(res, { user: result.user });
   } catch (err) {
     next(err);

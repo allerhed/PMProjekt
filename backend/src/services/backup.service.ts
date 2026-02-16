@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
 import { PassThrough } from 'stream';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 import cron, { ScheduledTask } from 'node-cron';
 import { containerClient } from '../config/azure-storage';
 import config from '../config';
@@ -140,11 +143,66 @@ export async function getBackupDownloadUrl(backupId: string, organizationId: str
   return generatePresignedDownloadUrl(backup.file_key);
 }
 
+export async function listBackupTables(
+  backupId: string,
+  organizationId: string,
+): Promise<string[]> {
+  const backup = await backupModel.findBackupById(backupId, organizationId);
+  if (!backup || backup.status !== 'completed' || !backup.file_key) {
+    throw Object.assign(new Error('Backup not available'), { statusCode: 404 });
+  }
+
+  const backupData = await readFile(backup.file_key);
+  const tmpFile = path.join(os.tmpdir(), `backup-toc-${backup.id}-${Date.now()}.dump`);
+
+  try {
+    await fs.writeFile(tmpFile, backupData);
+
+    const { stdout } = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const proc = spawn('pg_restore', ['-l', tmpFile], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+      proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+
+      proc.on('close', (code) => {
+        // pg_restore -l may return non-zero for warnings
+        if (code !== 0 && !stdout) {
+          reject(new Error(`pg_restore -l failed (code ${code}): ${stderr}`));
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+      proc.on('error', reject);
+    });
+
+    // Parse TOC lines like: "123; 1259 16389 TABLE public users construction_admin"
+    const tables = new Set<string>();
+    for (const line of stdout.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith(';')) continue; // comment line
+      // Format: <id>; <oid> <oid> <type> <schema> <name> <owner>
+      const match = trimmed.match(/^\d+;\s+\d+\s+\d+\s+TABLE\s+\S+\s+(\S+)\s+/);
+      if (match) {
+        tables.add(match[1]);
+      }
+    }
+
+    return Array.from(tables).sort();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
+}
+
 export async function restoreFromBackup(
   backupId: string,
   organizationId: string,
   userId: string,
   ipAddress?: string,
+  tables?: string[],
 ): Promise<void> {
   const backup = await backupModel.findBackupById(backupId, organizationId);
   if (!backup || backup.status !== 'completed' || !backup.file_key) {
@@ -154,14 +212,28 @@ export async function restoreFromBackup(
   const db = parseDatabaseUrl(config.db.url);
   const backupData = await readFile(backup.file_key);
 
-  const restoreProcess = spawn('pg_restore', [
-    '--clean', '--if-exists',
+  const args: string[] = [];
+
+  if (tables && tables.length > 0) {
+    // Selective restore: restore only specified tables with --clean for those tables
+    args.push('--clean', '--if-exists');
+    for (const table of tables) {
+      args.push('-t', table);
+    }
+  } else {
+    // Full restore: clean everything
+    args.push('--clean', '--if-exists');
+  }
+
+  args.push(
     '--no-owner', '--no-acl',
     '-h', db.host,
     '-p', db.port,
     '-U', db.user,
     '-d', db.database,
-  ], {
+  );
+
+  const restoreProcess = spawn('pg_restore', args, {
     env: { ...process.env, PGPASSWORD: db.password },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -191,11 +263,16 @@ export async function restoreFromBackup(
     action: 'backup.restored',
     resourceType: 'backup',
     resourceId: backupId,
-    metadata: { backupName: backup.name, backupDate: backup.created_at },
+    metadata: {
+      backupName: backup.name,
+      backupDate: backup.created_at,
+      restoreType: tables && tables.length > 0 ? 'selective' : 'full',
+      ...(tables && tables.length > 0 ? { tables } : {}),
+    },
     ipAddress,
   });
 
-  logger.info({ backupId, organizationId }, 'Database restored from backup');
+  logger.info({ backupId, organizationId, tables: tables || 'all' }, 'Database restored from backup');
 }
 
 export async function deleteBackupWithFile(
