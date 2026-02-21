@@ -15,14 +15,14 @@ export interface ProtocolSignatureRow {
 
 export async function createSigningToken(
   protocolId: string,
-  token: string,
+  _token: string,
   tokenHash: string,
   expiresInDays: number = 7,
 ): Promise<ProtocolSignatureRow> {
   const result = await pool.query(
     `INSERT INTO protocol_signatures (protocol_id, token, token_hash, expires_at)
-     VALUES ($1, $2, $3, NOW() + INTERVAL '${expiresInDays} days') RETURNING *`,
-    [protocolId, token, tokenHash],
+     VALUES ($1, 'redacted', $2, NOW() + make_interval(days => $3)) RETURNING *`,
+    [protocolId, tokenHash, expiresInDays],
   );
   return result.rows[0];
 }

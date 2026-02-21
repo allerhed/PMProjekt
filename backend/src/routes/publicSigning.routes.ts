@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { sendSuccess, sendError } from '../utils/response';
 import { param } from '../utils/params';
 import { validate } from '../middleware/validate';
@@ -13,8 +14,9 @@ const router = Router();
 router.get('/:token', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = param(req.params.token);
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const sigRecord = await protocolSignatureModel.findByToken(token);
+    const sigRecord = await protocolSignatureModel.findByTokenHash(tokenHash);
     if (!sigRecord) {
       sendError(res, 404, 'NOT_FOUND', 'Signing link not found or expired');
       return;
@@ -50,8 +52,9 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const token = param(req.params.token);
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-      const sigRecord = await protocolSignatureModel.findByToken(token);
+      const sigRecord = await protocolSignatureModel.findByTokenHash(tokenHash);
       if (!sigRecord) {
         sendError(res, 404, 'NOT_FOUND', 'Signing link not found or expired');
         return;

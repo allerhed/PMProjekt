@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import multer from 'multer';
 import { authenticate } from '../middleware/authenticate';
 import { authorize } from '../middleware/authorize';
@@ -94,7 +95,7 @@ router.post(
       }
 
       // Use admin-provided password or generate a temporary one
-      const passwordToHash = req.body.password || `Temp${Date.now()}!`;
+      const passwordToHash = req.body.password || `Temp${crypto.randomBytes(16).toString('hex')}!`;
       const policyError = validatePasswordPolicy(passwordToHash, req.body.email);
       if (policyError) {
         sendError(res, 400, 'VALIDATION_ERROR', policyError);
@@ -224,7 +225,7 @@ router.post(
 
       let created = 0;
       for (const item of usersToCreate) {
-        const passwordToHash = item.password || `Temp${Date.now()}!`;
+        const passwordToHash = item.password || `Temp${crypto.randomBytes(16).toString('hex')}!`;
         const policyError = validatePasswordPolicy(passwordToHash, item.email);
         if (policyError) continue; // Already validated in parser, skip if somehow fails
 

@@ -148,13 +148,13 @@ export async function reorder(
   orderedIds: string[],
 ): Promise<void> {
   const cases = orderedIds
-    .map((id, index) => `WHEN id = '${id}' THEN ${index}`)
+    .map((_, index) => `WHEN id = $${index + 3} THEN ${index}`)
     .join(' ');
 
   await pool.query(
     `UPDATE custom_field_definitions
      SET display_order = CASE ${cases} ELSE display_order END
      WHERE organization_id = $1 AND entity_type = $2`,
-    [organizationId, entityType],
+    [organizationId, entityType, ...orderedIds],
   );
 }

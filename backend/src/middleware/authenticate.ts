@@ -22,21 +22,21 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Attach user to request
+    // Attach user to request (use fresh DB data, not stale JWT claims)
     req.user = {
-      userId: decoded.userId,
-      organizationId: decoded.organizationId,
-      role: decoded.role,
-      email: decoded.email,
+      userId: user.id,
+      organizationId: user.organization_id,
+      role: user.role,
+      email: user.email,
     };
 
-    // Refresh token if past 50% lifetime
+    // Refresh token if past 50% lifetime (use fresh DB data)
     if (shouldRefreshToken(decoded.iat, decoded.exp)) {
       const newToken = generateToken({
-        userId: decoded.userId,
-        organizationId: decoded.organizationId,
-        role: decoded.role,
-        email: decoded.email,
+        userId: user.id,
+        organizationId: user.organization_id,
+        role: user.role,
+        email: user.email,
       });
       setAuthCookie(res, newToken);
     }

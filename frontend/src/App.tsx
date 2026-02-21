@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/authStore';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { ToastProvider } from './components/common/Toast';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import RoleGuard from './components/auth/RoleGuard';
 import AppLayout from './components/layout/AppLayout';
 import NetworkStatus from './components/common/NetworkStatus';
 import { FullPageSpinner } from './components/ui/Spinner';
@@ -80,13 +81,13 @@ function AppRoutes() {
           <Route path="/projects/:projectId/tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="/products" element={<ProductListPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/admin/users" element={<UserManagementPage />} />
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin/settings" element={<OrgSettingsPage />} />
-          <Route path="/admin/form-builder" element={<FormBuilderPage />} />
-          <Route path="/admin/task-report" element={<TaskReportPage />} />
-          <Route path="/admin/backups" element={<BackupPage />} />
-          <Route path="/admin/bug-reports" element={<BugReportsPage />} />
+          <Route path="/admin/users" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><UserManagementPage /></RoleGuard>} />
+          <Route path="/admin/dashboard" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><AdminDashboardPage /></RoleGuard>} />
+          <Route path="/admin/settings" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><OrgSettingsPage /></RoleGuard>} />
+          <Route path="/admin/form-builder" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><FormBuilderPage /></RoleGuard>} />
+          <Route path="/admin/task-report" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><TaskReportPage /></RoleGuard>} />
+          <Route path="/admin/backups" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><BackupPage /></RoleGuard>} />
+          <Route path="/admin/bug-reports" element={<RoleGuard roles={['org_admin', 'super_admin']} fallback={<Navigate to="/projects" replace />}><BugReportsPage /></RoleGuard>} />
         </Route>
 
         {/* Default redirect */}

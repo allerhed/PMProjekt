@@ -16,8 +16,8 @@ export async function createResetToken(
 ): Promise<PasswordResetTokenRow> {
   const result = await pool.query(
     `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, NOW() + INTERVAL '${expiresInHours} hours') RETURNING *`,
-    [userId, tokenHash],
+     VALUES ($1, $2, NOW() + make_interval(hours => $3)) RETURNING *`,
+    [userId, tokenHash, expiresInHours],
   );
   return result.rows[0];
 }

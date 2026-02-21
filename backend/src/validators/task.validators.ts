@@ -26,10 +26,10 @@ export const createTaskSchema = z.object({
 
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(255).optional(),
-  description: z.string().max(5000).optional(),
+  description: z.string().max(5000).nullable().optional(),
   status: z.enum(['open', 'in_progress', 'completed', 'verified']).optional(),
   priority: z.enum(['low', 'normal', 'high', 'critical']).optional(),
-  trade: z.string().max(50).optional(),
+  trade: z.string().max(50).nullable().optional(),
   blueprintId: z.string().uuid().nullable().optional(),
   locationX: z.number().min(0).max(1).nullable().optional(),
   locationY: z.number().min(0).max(1).nullable().optional(),

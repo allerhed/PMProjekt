@@ -22,7 +22,10 @@ export const updateCustomFieldSchema = z.object({
   isRequired: z.boolean().optional(),
   displayOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
-});
+}).refine(
+  (data) => data.fieldType !== 'select' || data.options === undefined || (data.options && data.options.length > 0),
+  { message: 'Options are required for select fields', path: ['options'] },
+);
 
 export const reorderCustomFieldsSchema = z.object({
   entityType: entityTypeEnum,

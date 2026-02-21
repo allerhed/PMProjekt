@@ -116,3 +116,25 @@ The frontend uses `pdfjs-dist` for PDF/blueprint rendering. The library loads a 
 
 The fix is in `frontend/Dockerfile` — a `sed` command patches `/etc/nginx/mime.types` to register `.mjs` as `application/javascript`. If the Dockerfile is rewritten or the base image changes, ensure this patch is preserved.
 
+### Model update functions must whitelist column names
+
+All model `update*` functions (e.g. `updateTask`, `updateUser`, `updateProject`) map camelCase input keys to snake_case DB column names via a `fieldMap` object. Keys not present in `fieldMap` **must be skipped** (`continue`), never used as raw column names. Using `fieldMap[key] || key` as a fallback is a SQL injection vector. When adding a new updatable field, always add it to the model's `fieldMap`.
+
+### Validator schemas must use `.nullable()` for clearable fields
+
+Any field the frontend can clear (set to `null`) must have `.nullable()` in the Zod schema, not just `.optional()`. Past incidents:
+- `updateTaskSchema`: `description` and `trade` lacked `.nullable()`, causing 400 on task edit
+- Pattern: frontend uses `value || null` for optional strings → backend must accept `null`
+
+### Signing tokens must not be stored in plaintext
+
+Protocol signing tokens are looked up by hash (`findByTokenHash`), not by raw token. The `createSigningToken` function stores `'redacted'` in the `token` column. The public signing routes hash the incoming URL token and query by `token_hash`. Never add code that relies on reading the plaintext `token` column.
+
+### Admin routes require RoleGuard on the frontend
+
+All `/admin/*` routes in `App.tsx` must be wrapped in `<RoleGuard roles={['org_admin', 'super_admin']}>`. The backend enforces role checks on admin API endpoints, but without the frontend guard, unauthorized users see the admin UI (with empty/error states). When adding a new admin page, always wrap it in `RoleGuard`.
+
+### Rate limiter must be applied and trust proxy set
+
+The `apiLimiter` (100 req/min) is applied to `/api/v1` in `app.ts`. The `trust proxy` setting is required in production so `express-rate-limit` sees real client IPs instead of the Nginx proxy IP. The rate limiter is skipped in the `test` environment to avoid 429s in the test suite.
+

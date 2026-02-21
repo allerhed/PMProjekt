@@ -6,6 +6,8 @@ const pool = new Pool({
   connectionString: config.db.url,
   min: config.db.poolMin,
   max: config.db.poolMax,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('error', (err) => {

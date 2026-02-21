@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
 import { inputSanitizer } from './middleware/inputSanitizer';
 import { requestIdMiddleware } from './middleware/requestId';
+import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFound';
 import { authenticate } from './middleware/authenticate';
@@ -33,6 +34,11 @@ import bugReportRoutes from './routes/bugReport.routes';
 import config from './config';
 
 const app = express();
+
+// Trust proxy (behind Nginx in production)
+if (config.env === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Security
 app.use(helmet());
@@ -65,6 +71,9 @@ if (config.env !== 'test') {
 app.use(healthRoutes);
 
 // API Routes
+if (config.env !== 'test') {
+  app.use('/api/v1', apiLimiter);
+}
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/public/sign', publicSigningRoutes);
 app.use('/api/v1/projects', projectRoutes);

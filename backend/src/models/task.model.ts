@@ -260,7 +260,8 @@ export async function updateTask(
   };
 
   for (const [key, value] of Object.entries(updates)) {
-    const dbField = fieldMap[key] || key;
+    const dbField = fieldMap[key];
+    if (!dbField) continue;
     if (value !== undefined) {
       fields.push(`${dbField} = $${paramIndex}`);
       values.push(dbField === 'custom_fields' || dbField === 'annotation_markers' ? JSON.stringify(value) : value);
